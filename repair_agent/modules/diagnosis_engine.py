@@ -343,7 +343,7 @@ class RepairDiagnosisEngine:
                     },
                     {
                         "type": "text",
-                        "text": "你是一个专业的消费电子产品维修诊断专家。请分析这张故障照片，用中文回答：1) 这是什么设备？2) 故障现象是什么？3) 损伤程度如何？4) 建议如何处理？请简洁回答。"
+                        "text": "你是一个专业的航空维修诊断专家。请分析这张故障照片，用中文回答：1) 这是什么设备/部件？2) 故障现象是什么？3) 损伤程度如何？4) 建议如何处理？请简洁回答。"
                     }
                 ]
             }]
@@ -607,23 +607,24 @@ class RepairDiagnosisEngine:
         causes = diagnosis_result.get("possible_causes", [])
         recommended = diagnosis_result.get("recommended_actions", [])
         
-        solution_prompt = f"""你是一个专业的消费电子产品维修工程师。请根据以下诊断结果，提供详细的维修方案。
+        solution_prompt = f"""你是一个专业的航空维修工程师。请根据以下诊断结果，提供详细的维修方案。
 
 【故障类型】{fault_type}
 【可能原因】{', '.join(causes)}
 【建议操作】{', '.join(recommended)}
 
 请按以下格式输出：
-1. 维修步骤（按顺序列出）
+1. 维修步骤（按顺序列出，参考AMM手册）
 2. 所需工具
-3. 所需备件（如有）
+3. 所需备件（含件号，如有）
 4. 安全注意事项
 5. 预计维修时间和难度
+6. 是否需要适航批准
 
 请用简洁的中文回答。"""
 
         messages = [
-            {"role": "system", "content": "你是一个专业的消费电子产品维修工程师。"},
+            {"role": "system", "content": "你是一个专业的航空维修工程师。"},
             {"role": "user", "content": solution_prompt}
         ]
         
@@ -655,7 +656,7 @@ class RepairDiagnosisEngine:
                 image_context = f"\n\n【现场照片分析】\n{image_analysis}\n"
             
             # 构建诊断提示词
-            system_prompt = "你是一个专业的消费电子产品维修诊断专家。请根据用户描述的故障现象进行分析，给出诊断结果。只返回JSON格式。"
+            system_prompt = "你是一个专业的航空维修诊断专家。请根据用户描述的故障现象进行分析，给出诊断结果。只返回JSON格式。"
             
             user_prompt = f"""请根据以下故障描述进行分析，并给出诊断结果。
 
@@ -768,7 +769,7 @@ class RepairDiagnosisEngine:
             causes = diagnosis_result.get("possible_causes", [])
             recommended = diagnosis_result.get("recommended_actions", [])
             
-            system_prompt = "你是一个专业的消费电子产品维修工程师。请根据诊断结果提供详细的维修方案。只返回JSON格式。"
+            system_prompt = "你是一个专业的航空维修工程师。请根据诊断结果提供详细的维修方案。只返回JSON格式。"
             
             user_prompt = f"""请根据以下诊断结果，提供详细的维修方案。
 

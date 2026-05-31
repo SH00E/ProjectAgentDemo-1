@@ -132,7 +132,7 @@ def auto_init_agent():
 
 # ==================== FastAPI App ====================
 
-app = FastAPI(title="保障智能助手")
+app = FastAPI(title="航空维修智能助手")
 
 # 挂载静态文件
 static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -274,7 +274,7 @@ async def index(request: Request):
 async def get_status():
     """获取系统状态"""
     if agent_state["agent"] is not None:
-        return {"status": "ready", "message": "✅ 保障智能助手已就绪"}
+        return {"status": "ready", "message": "✅ 航空维修智能助手已就绪"}
     elif agent_state["initting"]:
         return {"status": "initializing", "message": "⏳ 正在初始化..."}
     elif agent_state["init_error"]:
@@ -654,7 +654,7 @@ def launch_app(host="127.0.0.1", port=7860):
     """启动 FastAPI 应用"""
     import uvicorn
     print(f"\n{'='*60}")
-    print(f"[保障智能助手] FastAPI Web 界面")
+    print(f"[航空维修智能助手] FastAPI Web 界面")
     print(f"{'='*60}")
     print(f"启动中...")
     print(f"访问地址: http://{host}:{port}")

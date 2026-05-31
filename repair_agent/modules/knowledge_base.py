@@ -40,7 +40,7 @@ class RepairKnowledgeBase:
         
         Args:
             file_path: 手册文件路径 (PDF/Word/Excel/Markdown)
-            device_type: 设备类型 (如：汽车、空调、冰箱)
+            device_type: 设备类型 (如：CESSNA 172, BOEING 737)
             metadata: 额外元数据
             
         Returns:

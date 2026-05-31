@@ -47,11 +47,15 @@ def test_diagnosis():
     # 测试用例
     test_cases = [
         {
-            "description": "手机屏幕碎裂，触摸不灵敏，但能正常开机显示",
+            "description": "CESSNA 172 发动机在起飞后熄火，滑油压力指示异常低",
             "image_path": None
         },
         {
-            "description": "笔记本电脑无法开机，电源指示灯不亮，电池已充满",
+            "description": "BOEING 737 左侧起落架收放异常，液压系统压力下降",
+            "image_path": None
+        },
+        {
+            "description": "BELL 206 直升机主旋翼振动异常，伴随异响",
             "image_path": None
         }
     ]

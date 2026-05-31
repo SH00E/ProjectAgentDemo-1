@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>保障智能助手 - 智能维修诊断系统</title>
+    <title>航空维修智能助手 - 智能维修诊断系统</title>
     <link rel="stylesheet" href="/static/style.css">
     <script src="/static/d3.min.js"></script>
 </head>
@@ -11,8 +11,8 @@
     <!-- 顶部状态栏 -->
     <header class="header">
         <div class="header-content">
-            <h1>🔧 保障智能助手</h1>
-            <p class="subtitle">基于 RAG + 知识图谱 + 多模态 LLM 的智能维修诊断系统</p>
+            <h1>✈️ 航空维修智能助手</h1>
+            <p class="subtitle">基于 RAG + 知识图谱 + 多模态 LLM 的航空维修诊断系统</p>
         </div>
         <div id="status-bar" class="status-bar status-loading">
             ⏳ 正在初始化系统...
@@ -81,7 +81,7 @@
             <div class="search-main">
                 <h2>📚 检索维修知识库</h2>
                 <div class="search-form">
-                    <input type="text" id="search-query" placeholder="例如：手机屏幕碎了怎么修" />
+                    <input type="text" id="search-query" placeholder="例如：CESSNA 172 发动机熄火原因" />
                     <button id="btn-search" class="btn btn-primary">🔍 检索</button>
                 </div>
                 <div id="search-results" class="search-results">
@@ -96,14 +96,14 @@
                 <div class="hot-search">
                     <h3>🔥 热门搜索</h3>
                     <div class="hot-tags">
-                        <span class="hot-tag" data-query="手机屏幕碎裂">手机屏幕碎裂</span>
-                        <span class="hot-tag" data-query="电池不耐用">电池不耐用</span>
-                        <span class="hot-tag" data-query="无法开机">无法开机</span>
-                        <span class="hot-tag" data-query="触摸失灵">触摸失灵</span>
-                        <span class="hot-tag" data-query="充电异常">充电异常</span>
-                        <span class="hot-tag" data-query="笔记本散热">笔记本散热</span>
-                        <span class="hot-tag" data-query="空调不制冷">空调不制冷</span>
-                        <span class="hot-tag" data-query="洗衣机漏水">洗衣机漏水</span>
+                        <span class="hot-tag" data-query="发动机熄火">发动机熄火</span>
+                        <span class="hot-tag" data-query="起落架故障">起落架故障</span>
+                        <span class="hot-tag" data-query="液压系统泄漏">液压系统泄漏</span>
+                        <span class="hot-tag" data-query="滑油温度高">滑油温度高</span>
+                        <span class="hot-tag" data-query="电气故障">电气故障</span>
+                        <span class="hot-tag" data-query="刹车失灵">刹车失灵</span>
+                        <span class="hot-tag" data-query="螺旋桨异响">螺旋桨异响</span>
+                        <span class="hot-tag" data-query="仪表异常">仪表异常</span>
                     </div>
                 </div>
                 <div class="search-history">
