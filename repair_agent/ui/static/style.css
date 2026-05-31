@@ -124,7 +124,7 @@ h2 {
 
 .diagnosis-layout {
     display: grid;
-    grid-template-columns: 280px 1fr 1fr;
+    grid-template-columns: 350px 1fr 1fr;
     gap: 20px;
     margin-bottom: 24px;
 }
@@ -152,6 +152,18 @@ h2 {
     margin-bottom: 6px;
 }
 
+#fault-desc {
+    width: 100%;
+    min-height: 200px;
+    padding: 12px 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 15px;
+    font-family: inherit;
+    line-height: 1.6;
+    resize: vertical;
+}
+
 textarea,
 input[type="text"],
 input[type="file"] {
@@ -173,7 +185,7 @@ input[type="text"]:focus {
 
 textarea {
     resize: vertical;
-    min-height: 150px;
+    min-height: 120px;
     line-height: 1.6;
 }
 
