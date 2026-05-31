@@ -558,6 +558,12 @@ async function searchKnowledge() {
                 const aircraftModel = r.aircraft_model || '';
                 const manufacturer = r.manufacturer || '';
                 const recordId = r.record_id || '';
+                
+                // 判断来源类型
+                let sourceIcon = '📖';
+                if (source.includes('FAA')) sourceIcon = '✈️';
+                else if (source.includes('MaintNet')) sourceIcon = '🔧';
+                else if (source.includes('案例') || recordId.startsWith('CASE_')) sourceIcon = '📝';
 
                 // 高亮关键词
                 let highlightedContent = escapeHtml(content.substring(0, 300));

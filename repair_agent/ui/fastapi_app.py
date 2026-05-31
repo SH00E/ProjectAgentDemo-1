@@ -438,6 +438,54 @@ async def add_case(request: Request):
     try:
         # 保存到 SQLite
         case_id = save_case_to_db(case_data)
+        
+        # 同步到 Qdrant 向量库，使其可被检索
+        try:
+            from qdrant_client import QdrantClient
+            from qdrant_client.models import PointStruct
+            from hello_agents.memory.embedding import get_text_embedder
+            
+            client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
+            embedder = get_text_embedder()
+            
+            # 构建可检索的文本
+            search_text = f"{case_data['title']} | 设备: {case_data['device_type']} | 故障: {case_data['fault_symptom']} | 原因: {case_data['fault_cause']} | 方案: {case_data['solution']}"
+            vector = embedder.encode(search_text).tolist()
+            
+            # 获取当前最大ID
+            collections = [c.name for c in client.get_collections().collections]
+            if "aviation_knowledge_base" in collections:
+                # 使用时间戳作为唯一ID
+                import time
+                point_id = int(time.time() * 1000000)
+                
+                client.upsert(
+                    collection_name="aviation_knowledge_base",
+                    points=[PointStruct(
+                        id=point_id,
+                        vector=vector,
+                        payload={
+                            "source": "user_case",
+                            "record_id": f"CASE_{case_id}",
+                            "content": search_text,
+                            "text": search_text,
+                            "aircraft_model": case_data["device_type"],
+                            "description": case_data["fault_symptom"],
+                            "problem": case_data["fault_symptom"],
+                            "action": case_data["solution"],
+                            "memory_type": "rag_chunk",
+                            "memory_id": f"case_{case_id}",
+                            "user_id": "rag_user",
+                            "is_rag_data": True,
+                            "data_source": "rag_pipeline",
+                            "rag_namespace": "default"
+                        }
+                    )]
+                )
+                logger.info(f"✅ 案例已同步到 Qdrant: CASE_{case_id}")
+        except Exception as e:
+            logger.warning(f"⚠️ 案例同步到 Qdrant 失败: {e}")
+        
         return {"success": True, "message": "案例添加成功", "case_id": case_id}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"添加失败: {e}"})
