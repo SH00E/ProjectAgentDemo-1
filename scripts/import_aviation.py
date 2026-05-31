@@ -147,7 +147,15 @@ def import_faa_to_qdrant(client, model, rows, start_id):
                 "accident_type": row.get("accident_type", ""),
                 "date": row.get("date", ""),
                 "state": row.get("state", ""),
-                "text": text
+                "text": text,
+                # RAG 管道兼容字段
+                "content": text,
+                "memory_type": "rag_chunk",
+                "memory_id": f"faa_{row.get('record_id', '')}",
+                "user_id": "rag_user",
+                "is_rag_data": True,
+                "data_source": "rag_pipeline",
+                "rag_namespace": "default"
             }
         )
         points.append(point)
@@ -178,7 +186,15 @@ def import_maintnet_to_qdrant(client, model, rows, start_id):
                 "problem_zh": row.get("problem_zh", ""),
                 "action": row.get("action", ""),
                 "action_zh": row.get("action_zh", ""),
-                "text": text
+                "text": text,
+                # RAG 管道兼容字段
+                "content": text,
+                "memory_type": "rag_chunk",
+                "memory_id": f"maintnet_{row.get('record_id', '')}",
+                "user_id": "rag_user",
+                "is_rag_data": True,
+                "data_source": "rag_pipeline",
+                "rag_namespace": "default"
             }
         )
         points.append(point)

@@ -61,16 +61,25 @@ class RepairAgent:
             memory_types=["working", "episodic", "semantic", "perceptual"]
         )
         
-        # RAG工具
+        # RAG工具 - 使用航空数据集合
         knowledge_base_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "knowledge"
         )
         
+        # 检查航空数据集合是否存在
+        from qdrant_client import QdrantClient
+        qdrant = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
+        collections = [c.name for c in qdrant.get_collections().collections]
+        collection_name = "aviation_knowledge_base" if "aviation_knowledge_base" in collections else "rag_knowledge_base"
+        
         self.rag_tool = RAGTool(
             knowledge_base_path=knowledge_base_path,
-            rag_namespace="repair_kb"
+            collection_name=collection_name,
+            rag_namespace="default"
         )
+        
+        print(f"✅ RAG工具使用集合: {collection_name}")
         
         # LLM
         self.llm = HelloAgentsLLM()
