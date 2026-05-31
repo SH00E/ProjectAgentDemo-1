@@ -38,7 +38,6 @@ const elements = {
 
     // 案例
     caseTitle: document.getElementById('case-title'),
-    caseText: document.getElementById('case-text'),
     btnAddCase: document.getElementById('btn-add-case'),
     caseResult: document.getElementById('case-result'),
     caseList: document.getElementById('case-list'),
@@ -670,37 +669,78 @@ function initCase() {
 
 function applyTemplate(type) {
     const templates = {
-        device: {
-            title: '电子设备维修案例',
-            text: '设备类型：\n故障现象：\n故障原因：\n维修步骤：\n1. \n2. \n3. \n使用工具：\n更换备件：\n维修结果：'
+        aircraft: {
+            title: '飞机维修案例',
+            device_type: 'CESSNA 172',
+            fault_symptom: '发动机运行不稳定，出现间歇性熄火',
+            fault_cause: '燃油滤清器堵塞，导致供油不足',
+            solution: '1. 检查燃油系统\n2. 更换燃油滤清器\n3. 测试发动机运行',
+            parts_used: '燃油滤清器',
+            technician: '',
+            notes: ''
         },
-        appliance: {
-            title: '家用电器维修案例',
-            text: '电器类型：\n品牌型号：\n故障现象：\n故障原因：\n维修步骤：\n1. \n2. \n3. \n使用工具：\n更换备件：\n维修结果：'
+        engine: {
+            title: '发动机故障案例',
+            device_type: 'CONTINENTAL IO-360',
+            fault_symptom: '发动机功率下降，排气管冒黑烟',
+            fault_cause: '火花塞积碳严重，点火不良',
+            solution: '1. 拆卸火花塞\n2. 清洁或更换火花塞\n3. 检查点火系统\n4. 测试运行',
+            parts_used: '火花塞',
+            technician: '',
+            notes: ''
         },
-        vehicle: {
-            title: '汽车维修案例',
-            text: '车辆信息：\n故障现象：\n故障码：\n故障原因：\n维修步骤：\n1. \n2. \n3. \n使用工具：\n更换配件：\n维修结果：'
+        landing: {
+            title: '起落架问题案例',
+            device_type: 'BOEING 737',
+            fault_symptom: '起落架收放异常，指示灯不亮',
+            fault_cause: '液压系统泄漏，压力不足',
+            solution: '1. 检查液压系统\n2. 修复泄漏点\n3. 补充液压油\n4. 测试起落架收放',
+            parts_used: '液压油管、密封圈',
+            technician: '',
+            notes: ''
         },
         custom: {
             title: '',
-            text: ''
+            device_type: '',
+            fault_symptom: '',
+            fault_cause: '',
+            solution: '',
+            parts_used: '',
+            technician: '',
+            notes: ''
         }
     };
 
     const template = templates[type];
     if (template) {
-        elements.caseTitle.value = template.title;
-        elements.caseText.value = template.text;
+        document.getElementById('case-title').value = template.title;
+        document.getElementById('case-device-type').value = template.device_type;
+        document.getElementById('case-fault-symptom').value = template.fault_symptom;
+        document.getElementById('case-fault-cause').value = template.fault_cause;
+        document.getElementById('case-solution').value = template.solution;
+        document.getElementById('case-parts').value = template.parts_used;
+        document.getElementById('case-technician').value = template.technician;
+        document.getElementById('case-notes').value = template.notes;
     }
 }
 
 async function addCase() {
-    const caseText = elements.caseText.value.trim();
-    if (!caseText) {
-        alert('请输入案例内容');
+    const title = document.getElementById('case-title').value.trim();
+    if (!title) {
+        alert('请输入案例标题');
         return;
     }
+
+    const caseData = {
+        title: title,
+        device_type: document.getElementById('case-device-type').value.trim(),
+        fault_symptom: document.getElementById('case-fault-symptom').value.trim(),
+        fault_cause: document.getElementById('case-fault-cause').value.trim(),
+        solution: document.getElementById('case-solution').value.trim(),
+        parts_used: document.getElementById('case-parts').value.trim(),
+        technician: document.getElementById('case-technician').value.trim(),
+        notes: document.getElementById('case-notes').value.trim()
+    };
 
     elements.btnAddCase.disabled = true;
     elements.btnAddCase.textContent = '➕ 添加中...';
@@ -711,7 +751,7 @@ async function addCase() {
         const response = await fetch('/api/case', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ case_text: caseText })
+            body: JSON.stringify(caseData)
         });
 
         const data = await response.json();
@@ -719,8 +759,15 @@ async function addCase() {
         if (data.success) {
             elements.caseResult.textContent = `✅ ${data.message}`;
             elements.caseResult.className = 'result-message success';
-            elements.caseTitle.value = '';
-            elements.caseText.value = '';
+            // 清空表单
+            document.getElementById('case-title').value = '';
+            document.getElementById('case-device-type').value = '';
+            document.getElementById('case-fault-symptom').value = '';
+            document.getElementById('case-fault-cause').value = '';
+            document.getElementById('case-solution').value = '';
+            document.getElementById('case-parts').value = '';
+            document.getElementById('case-technician').value = '';
+            document.getElementById('case-notes').value = '';
             // 刷新案例列表
             loadCases();
         } else {
@@ -748,18 +795,29 @@ async function loadCases() {
         if (data.success && data.cases && data.cases.length > 0) {
             let html = '';
             data.cases.forEach((c, i) => {
-                const content = c.content || c.description || JSON.stringify(c);
-                const time = c.timestamp || c.created_at || '';
-                const faultType = c.fault_type || '';
+                const title = c.title || `案例 ${i + 1}`;
+                const deviceType = c.device_type || '';
+                const faultSymptom = c.fault_symptom || '';
+                const faultCause = c.fault_cause || '';
+                const solution = c.solution || '';
+                const partsUsed = c.parts_used || '';
+                const technician = c.technician || '';
+                const notes = c.notes || '';
+                const createdAt = c.created_at || '';
 
                 html += `
                     <div class="case-item">
                         <div class="case-item-header">
-                            <div class="case-item-title">📋 案例 ${i + 1}</div>
-                            <div class="case-item-time">${time ? escapeHtml(String(time).substring(0, 10)) : ''}</div>
+                            <div class="case-item-title">✈️ ${escapeHtml(title)}</div>
+                            <div class="case-item-time">${createdAt ? escapeHtml(createdAt.substring(0, 10)) : ''}</div>
                         </div>
-                        <div class="case-item-content">${escapeHtml(content.substring(0, 150))}${content.length > 150 ? '...' : ''}</div>
-                        ${faultType ? `<div class="case-item-tags"><span class="case-tag">${escapeHtml(faultType)}</span></div>` : ''}
+                        ${deviceType ? `<div class="case-item-field"><strong>🛩️ 设备类型:</strong> ${escapeHtml(deviceType)}</div>` : ''}
+                        ${faultSymptom ? `<div class="case-item-field"><strong>⚠️ 故障现象:</strong> ${escapeHtml(faultSymptom)}</div>` : ''}
+                        ${faultCause ? `<div class="case-item-field"><strong>🔍 故障原因:</strong> ${escapeHtml(faultCause)}</div>` : ''}
+                        ${solution ? `<div class="case-item-field"><strong>🔧 解决方案:</strong> ${escapeHtml(solution).replace(/\n/g, '<br>')}</div>` : ''}
+                        ${partsUsed ? `<div class="case-item-field"><strong>📦 使用备件:</strong> ${escapeHtml(partsUsed)}</div>` : ''}
+                        ${technician ? `<div class="case-item-field"><strong>👤 维修人员:</strong> ${escapeHtml(technician)}</div>` : ''}
+                        ${notes ? `<div class="case-item-field"><strong>📝 备注:</strong> ${escapeHtml(notes)}</div>` : ''}
                     </div>
                 `;
             });

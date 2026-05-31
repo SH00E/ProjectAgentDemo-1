@@ -125,19 +125,45 @@
                 <div class="case-templates">
                     <h3>📋 快速模板</h3>
                     <div class="template-buttons">
-                        <button class="btn-template" data-template="device">📱 电子设备</button>
-                        <button class="btn-template" data-template="appliance">🏠 家用电器</button>
-                        <button class="btn-template" data-template="vehicle">🚗 汽车维修</button>
+                        <button class="btn-template" data-template="aircraft">✈️ 飞机维修</button>
+                        <button class="btn-template" data-template="engine">🔧 发动机故障</button>
+                        <button class="btn-template" data-template="landing">🛬 起落架问题</button>
                         <button class="btn-template" data-template="custom">✏️ 自定义</button>
                     </div>
                 </div>
                 <div class="form-group">
-                    <label for="case-title">案例标题</label>
-                    <input type="text" id="case-title" placeholder="例如：iPhone 12 屏幕碎裂维修" />
+                    <label for="case-title">案例标题 *</label>
+                    <input type="text" id="case-title" placeholder="例如：CESSNA 172 发动机熄火维修" />
                 </div>
                 <div class="form-group">
-                    <label for="case-text">案例内容</label>
-                    <textarea id="case-text" rows="6" placeholder="详细描述故障现象、维修步骤、使用的工具和备件..."></textarea>
+                    <label for="case-device-type">设备类型</label>
+                    <input type="text" id="case-device-type" placeholder="例如：CESSNA 172、BOEING 737" />
+                </div>
+                <div class="form-group">
+                    <label for="case-fault-symptom">故障现象</label>
+                    <textarea id="case-fault-symptom" rows="2" placeholder="描述故障的具体表现..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="case-fault-cause">故障原因</label>
+                    <textarea id="case-fault-cause" rows="2" placeholder="分析故障的根本原因..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="case-solution">解决方案</label>
+                    <textarea id="case-solution" rows="3" placeholder="详细的维修步骤..."></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="case-parts">使用备件</label>
+                        <input type="text" id="case-parts" placeholder="例如：火花塞、油封" />
+                    </div>
+                    <div class="form-group">
+                        <label for="case-technician">维修人员</label>
+                        <input type="text" id="case-technician" placeholder="姓名" />
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="case-notes">备注</label>
+                    <textarea id="case-notes" rows="2" placeholder="其他补充信息..."></textarea>
                 </div>
                 <button id="btn-add-case" class="btn btn-primary">➕ 添加案例</button>
                 <div id="case-result" class="result-message"></div>

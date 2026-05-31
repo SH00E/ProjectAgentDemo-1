@@ -10,7 +10,9 @@ import json
 import time
 import logging
 import tempfile
-from typing import Dict
+import sqlite3
+from typing import Dict, List, Optional
+from datetime import datetime
 
 from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
@@ -22,6 +24,85 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.repair_agent import RepairAgent
 
 logger = logging.getLogger(__name__)
+
+# ==================== 案例数据库 ====================
+
+CASES_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "memory_data", "cases.db")
+
+def init_cases_db():
+    """初始化案例数据库"""
+    os.makedirs(os.path.dirname(CASES_DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(CASES_DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS cases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            device_type TEXT,
+            fault_symptom TEXT,
+            fault_cause TEXT,
+            solution TEXT,
+            parts_used TEXT,
+            technician TEXT,
+            notes TEXT,
+            case_text TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def save_case_to_db(case_data: Dict) -> int:
+    """保存案例到数据库"""
+    conn = sqlite3.connect(CASES_DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO cases (title, device_type, fault_symptom, fault_cause, solution, parts_used, technician, notes, case_text)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        case_data.get("title", ""),
+        case_data.get("device_type", ""),
+        case_data.get("fault_symptom", ""),
+        case_data.get("fault_cause", ""),
+        case_data.get("solution", ""),
+        case_data.get("parts_used", ""),
+        case_data.get("technician", ""),
+        case_data.get("notes", ""),
+        case_data.get("case_text", "")
+    ))
+    case_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return case_id
+
+def load_cases_from_db(limit: int = 50) -> List[Dict]:
+    """从数据库加载案例"""
+    conn = sqlite3.connect(CASES_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM cases ORDER BY created_at DESC LIMIT ?', (limit,))
+    rows = cursor.fetchall()
+    conn.close()
+    
+    cases = []
+    for row in rows:
+        cases.append({
+            "id": row["id"],
+            "title": row["title"],
+            "device_type": row["device_type"],
+            "fault_symptom": row["fault_symptom"],
+            "fault_cause": row["fault_cause"],
+            "solution": row["solution"],
+            "parts_used": row["parts_used"],
+            "technician": row["technician"],
+            "notes": row["notes"],
+            "case_text": row["case_text"],
+            "created_at": row["created_at"]
+        })
+    return cases
+
+# 初始化数据库
+init_cases_db()
 
 # ==================== 全局状态 ====================
 
@@ -300,27 +381,40 @@ async def add_case(request: Request):
         return JSONResponse(status_code=503, content={"error": "系统未就绪"})
 
     body = await request.json()
-    case_text = body.get("case_text", "").strip()
-    if not case_text:
+    
+    # 支持结构化案例
+    case_data = {
+        "title": body.get("title", "").strip(),
+        "device_type": body.get("device_type", "").strip(),
+        "fault_symptom": body.get("fault_symptom", "").strip(),
+        "fault_cause": body.get("fault_cause", "").strip(),
+        "solution": body.get("solution", "").strip(),
+        "parts_used": body.get("parts_used", "").strip(),
+        "technician": body.get("technician", "").strip(),
+        "notes": body.get("notes", "").strip(),
+        "case_text": body.get("case_text", "").strip()
+    }
+    
+    # 如果只有 case_text，尝试从中提取信息
+    if case_data["case_text"] and not case_data["title"]:
+        case_data["title"] = case_data["case_text"][:50]
+    
+    if not case_data["title"] and not case_data["case_text"]:
         return JSONResponse(status_code=400, content={"error": "请输入案例内容"})
 
     try:
-        r = agent_state["agent"].add_case(case_text)
-        if r.get("success"):
-            return {"success": True, "message": r.get("message", "添加成功")}
-        else:
-            return {"success": False, "message": r.get("message", "添加失败")}
+        # 保存到 SQLite
+        case_id = save_case_to_db(case_data)
+        return {"success": True, "message": "案例添加成功", "case_id": case_id}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"添加失败: {e}"})
 
 @app.get("/api/cases")
 async def get_cases():
-    """获取案例列表（从诊断历史中提取）"""
-    if agent_state["agent"] is None:
-        return JSONResponse(status_code=503, content={"error": "系统未就绪"})
+    """获取案例列表"""
     try:
-        history = agent_state["agent"].get_diagnosis_history(limit=20)
-        return {"success": True, "cases": history}
+        cases = load_cases_from_db()
+        return {"success": True, "cases": cases}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"获取案例失败: {e}"})
 
