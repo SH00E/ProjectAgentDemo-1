@@ -1168,6 +1168,48 @@ textarea {
     margin: 0 0 16px 0;
 }
 
+/* 可视化标签页 */
+.viz-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 12px;
+}
+
+.viz-tab {
+    padding: 8px 16px;
+    border: 1px solid #e2e8f0;
+    background: white;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: #64748b;
+}
+
+.viz-tab:hover {
+    border-color: #3b82f6;
+    color: #3b82f6;
+    background: #eff6ff;
+}
+
+.viz-tab.active {
+    border-color: #3b82f6;
+    background: #3b82f6;
+    color: white;
+}
+
+/* 可视化面板 */
+.viz-panel {
+    display: none;
+}
+
+.viz-panel.active {
+    display: block;
+}
+
 .viz-description {
     background: #f0f7ff;
     border: 1px solid #b8d4fe;
