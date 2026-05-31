@@ -1,0 +1,58 @@
+word,description,compound,lemma,stem,pos,source
+engine,aircraft engine,engine-holder,engine,engin,NN,maintnet_grammar
+cylinder,cylinder baffle,-,cylinder,cylinder,NN,maintnet_grammar
+gasket,rocker cover gasket,-,gasket,gasket,NN,maintnet_grammar
+thrust,aircraft engine thrust,-,thrust,thrust,NN,maintnet_grammar
+inoperable,engine inoperable,-,inoperate,inoperabl,ADJ,maintnet_grammar
+hydraulic,aircraft hydraulic,-,hydraulic,hydraulic,NN,maintnet_grammar
+magnetos,cylender magnetos,-,magnetos,magnetos,NN,maintnet_grammar
+pressure,cylinder pressure,-,pressure,pressur,VB,maintnet_grammar
+ignition,aircraft ignition,-,ignition,ignition,NN,maintnet_grammar
+forward,forward cylinder,-,forward,forward,VB,maintnet_grammar
+replacement,valve or gasket replacement,-,replace,replacement,NN,maintnet_grammar
+external,external oil cover,-,external,external,NN,maintnet_grammar
+lower,lower altitute,-,lower,lower,VB,maintnet_grammar
+increasing,increasing cylinder power,-,increase,increas,ADJ,maintnet_grammar
+maintenance,aircraft maintenance,-,maintenance,maintenanc,NN,maintnet_grammar
+battery,aircraft battery,-,battery,battery,NN,maintnet_grammar
+broke,cylinder or baffle broke,-,broke,broke,NN,maintnet_grammar
+control,engine power control,-,control,control,NN,maintnet_grammar
+quit,engine suddendly stop or quit,-,quit,quit,NN,maintnet_grammar
+check,check or monitor the maintenance,-,check,check,ADJ,maintnet_grammar
+alternator,aircraft alternator,-,alternator,alternator,NN,maintnet_grammar
+turn,turn the power on/off,-,turn,turn,VB,maintnet_grammar
+exhaust,aircraft exhaust vavle,exhaust gas tempreture,exhaust,exhaust,NN,maintnet_grammar
+cylinder,left or right aircraft cylinders,cylinder head temperature,cylinder,cylinder,NN,maintnet_grammar
+open,open engine,-,open,open,ADJ,maintnet_grammar
+upper,upper proppler,-,upper,upper,VP,maintnet_grammar
+tighten,tighten screw,-,tighten,tighten,NN,maintnet_grammar
+celsius,temprature,-,celsius,celsius,NN,maintnet_grammar
+airmet,airmet gormet,-,airmet,airmet,NN,maintnet_grammar
+alarm,emergency alarm,-,alarm,alarm,ADJ,maintnet_grammar
+assystant,aircrfat start assytant,-,assystant,assystant,NN,maintnet_grammar
+fahrenheit,temprature,-,fahrenheit,fahrenheit,NN,maintnet_grammar
+channel,cylinder channel,-,channel,channel,NN,maintnet_grammar
+low,lowe power or temprature,-,low,low,PP,maintnet_grammar
+external,external rocker cover,-,external,external,NN,maintnet_grammar
+alpha,alpha temperature control,-,alpha,alpha,NN,maintnet_grammar
+service,service or maintenance,service-bulletin,service,servic,NN,maintnet_grammar
+failed,aircraft start failed,-,failed,fail,NN,maintnet_grammar
+suddenly,engine suddendly stop,-,suddenly,sudden,NN,maintnet_grammar
+assistant,service bulletin service,-,assistant,assistant,NN,maintnet_grammar
+loss,engine loss power,-,loss,loss,VB,maintnet_grammar
+edge,cylinder edge,leading-edge,edge,edg,NN,maintnet_grammar
+normal,normal start engine,-,normal,normal,ADJ,maintnet_grammar
+driftangle,aircraft drift-angle,driftangle,drift,drift,NN,maintnet_grammar
+weight,aircraft weight,-,weight,weight,NN,maintnet_grammar
+cuttoff,flight cuttoff,cuttoff,cuttoff,cuttoff,NN,maintnet_grammar
+knot,engine knot,-,knot,knot,NN,maintnet_grammar
+resistance,oil valve resistance,-,resist,resistanc,NN,maintnet_grammar
+flight,flighting operation,-,flight,flight,NN,maintnet_grammar
+aircraft,aircraft itself,-,aircraft,aircraft,NN,maintnet_grammar
+tapper,baffle tapper,-,tapper,tapper,NN,maintnet_grammar
+alert,emergency alert,-,alert,alert,NP,maintnet_grammar
+vibration,engine vibration,-,vibrate,vibration,NN,maintnet_grammar
+interface,flight user interface,digital-interface,interface,interfac,NN,maintnet_grammar
+deficiency,alram or red deficiency,-,deficient,deficienc,NN,maintnet_grammar
+baffle,cylender baffle,-,baffle,baffl,NN,maintnet_grammar
+drill,aircraft stopping the drill,pilot-drill,drill,drill,NN,maintnet_grammar

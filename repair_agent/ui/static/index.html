@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>保障智能助手 - 智能维修诊断系统</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/d3.min.js"></script>
+</head>
+<body>
+    <!-- 顶部状态栏 -->
+    <header class="header">
+        <div class="header-content">
+            <h1>🔧 保障智能助手</h1>
+            <p class="subtitle">基于 RAG + 知识图谱 + 多模态 LLM 的智能维修诊断系统</p>
+        </div>
+        <div id="status-bar" class="status-bar status-loading">
+            ⏳ 正在初始化系统...
+        </div>
+    </header>
+
+    <!-- 主标签页 -->
+    <nav class="tabs">
+        <button class="tab active" data-tab="diagnosis">🔍 故障诊断</button>
+        <button class="tab" data-tab="search">📚 知识检索</button>
+        <button class="tab" data-tab="case">📝 案例管理</button>
+        <button class="tab" data-tab="stats">📊 系统统计</button>
+    </nav>
+
+    <!-- Tab 1: 故障诊断 -->
+    <main id="tab-diagnosis" class="tab-content active">
+        <div class="diagnosis-layout">
+            <!-- 左侧：输入区域 -->
+            <aside class="input-panel">
+                <h2>📝 输入</h2>
+                <div class="form-group">
+                    <label for="fault-desc">故障描述</label>
+                    <textarea id="fault-desc" rows="4" placeholder="例如：手机屏幕碎裂，触摸不灵敏..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="fault-image">📷 上传照片（可选）</label>
+                    <input type="file" id="fault-image" accept="image/*">
+                    <div id="image-preview" class="image-preview hidden">
+                        <img id="preview-img" src="" alt="预览">
+                        <button id="remove-image" class="btn-remove">✕</button>
+                    </div>
+                </div>
+                <button id="btn-diagnose" class="btn btn-primary" disabled>🚀 开始诊断</button>
+            </aside>
+
+            <!-- 右侧：推理过程 -->
+            <section class="cot-panel">
+                <h2>🧠 推理过程</h2>
+                <div id="cot-area" class="cot-box">
+                    <em class="placeholder">等待输入故障描述...</em>
+                </div>
+            </section>
+        </div>
+
+        <!-- 工单区域 -->
+        <section class="order-section">
+            <h2>📄 维修工单</h2>
+            <div id="order-area" class="order-card hidden">
+                <!-- 工单内容由 JS 动态填充 -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Tab 2: 知识检索 -->
+    <main id="tab-search" class="tab-content">
+        <div class="search-layout">
+            <!-- 左侧：搜索区域 -->
+            <div class="search-main">
+                <h2>📚 检索维修知识库</h2>
+                <div class="search-form">
+                    <input type="text" id="search-query" placeholder="例如：手机屏幕碎了怎么修" />
+                    <button id="btn-search" class="btn btn-primary">🔍 检索</button>
+                </div>
+                <div id="search-results" class="search-results">
+                    <div class="search-placeholder">
+                        <span class="search-icon">🔍</span>
+                        <p>输入关键词开始检索知识库</p>
+                    </div>
+                </div>
+            </div>
+            <!-- 右侧：热门推荐 -->
+            <aside class="search-sidebar">
+                <div class="hot-search">
+                    <h3>🔥 热门搜索</h3>
+                    <div class="hot-tags">
+                        <span class="hot-tag" data-query="手机屏幕碎裂">手机屏幕碎裂</span>
+                        <span class="hot-tag" data-query="电池不耐用">电池不耐用</span>
+                        <span class="hot-tag" data-query="无法开机">无法开机</span>
+                        <span class="hot-tag" data-query="触摸失灵">触摸失灵</span>
+                        <span class="hot-tag" data-query="充电异常">充电异常</span>
+                        <span class="hot-tag" data-query="笔记本散热">笔记本散热</span>
+                        <span class="hot-tag" data-query="空调不制冷">空调不制冷</span>
+                        <span class="hot-tag" data-query="洗衣机漏水">洗衣机漏水</span>
+                    </div>
+                </div>
+                <div class="search-history">
+                    <h3>📋 检索历史</h3>
+                    <div id="search-history-list" class="history-list">
+                        <p class="empty-hint">暂无检索记录</p>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </main>
+
+    <!-- Tab 3: 案例管理 -->
+    <main id="tab-case" class="tab-content">
+        <div class="case-layout">
+            <!-- 左侧：添加案例 -->
+            <div class="case-add-panel">
+                <h2>📝 添加维修案例</h2>
+                <div class="case-templates">
+                    <h3>📋 快速模板</h3>
+                    <div class="template-buttons">
+                        <button class="btn-template" data-template="device">📱 电子设备</button>
+                        <button class="btn-template" data-template="appliance">🏠 家用电器</button>
+                        <button class="btn-template" data-template="vehicle">🚗 汽车维修</button>
+                        <button class="btn-template" data-template="custom">✏️ 自定义</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="case-title">案例标题</label>
+                    <input type="text" id="case-title" placeholder="例如：iPhone 12 屏幕碎裂维修" />
+                </div>
+                <div class="form-group">
+                    <label for="case-text">案例内容</label>
+                    <textarea id="case-text" rows="6" placeholder="详细描述故障现象、维修步骤、使用的工具和备件..."></textarea>
+                </div>
+                <button id="btn-add-case" class="btn btn-primary">➕ 添加案例</button>
+                <div id="case-result" class="result-message"></div>
+            </div>
+            <!-- 右侧：案例列表 -->
+            <div class="case-list-panel">
+                <h2>📚 已添加案例</h2>
+                <div id="case-list" class="case-list">
+                    <div class="loading-placeholder">
+                        <span class="loading-icon">⏳</span>
+                        <p>加载中...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Tab 4: 系统统计 -->
+    <main id="tab-stats" class="tab-content">
+        <h2>📊 系统运行状态</h2>
+        <!-- 状态卡片 -->
+        <div class="stats-cards">
+            <div class="stat-card">
+                <div class="stat-icon">📚</div>
+                <div class="stat-info">
+                    <div class="stat-label">知识库</div>
+                    <div class="stat-value" id="stat-kb-count">--</div>
+                    <div class="stat-desc">条记录</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🧠</div>
+                <div class="stat-info">
+                    <div class="stat-label">记忆系统</div>
+                    <div class="stat-value" id="stat-memory-count">--</div>
+                    <div class="stat-desc">条记忆</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📋</div>
+                <div class="stat-info">
+                    <div class="stat-label">诊断历史</div>
+                    <div class="stat-value" id="stat-diagnosis-count">--</div>
+                    <div class="stat-desc">次诊断</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⏱️</div>
+                <div class="stat-info">
+                    <div class="stat-label">运行状态</div>
+                    <div class="stat-value stat-status" id="stat-run-status">运行中</div>
+                    <div class="stat-desc" id="stat-session-id">--</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 组件状态 -->
+        <div class="components-section">
+            <h3>🔧 组件状态</h3>
+            <div id="components-list" class="components-grid">
+                <!-- 由 JS 动态填充 -->
+            </div>
+        </div>
+
+        <!-- 详细信息 -->
+        <div class="stats-detail-section">
+            <h3>📈 详细信息</h3>
+            <div class="stats-detail-grid">
+                <div class="detail-card">
+                    <h4>RAG 知识库</h4>
+                    <pre id="stats-rag" class="detail-content">加载中...</pre>
+                </div>
+                <div class="detail-card">
+                    <h4>记忆系统</h4>
+                    <pre id="stats-memory" class="detail-content">加载中...</pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- 知识图谱可视化 -->
+        <div class="viz-section">
+            <div class="viz-header" onclick="toggleVizSection('knowledge-graph')">
+                <h3>🗺️ 知识图谱可视化</h3>
+                <span class="viz-toggle" id="toggle-knowledge-graph">▶</span>
+            </div>
+            <div class="viz-content" id="viz-knowledge-graph" style="display: none;">
+                <div class="viz-description">
+                    <p>展示 Neo4j 中存储的航空维修知识图谱，包括维修记录、飞机型号、事故类型和制造商之间的关联关系。</p>
+                    <ul>
+                        <li><span class="legend-dot" style="background: #60a5fa;"></span> <strong>蓝色节点</strong> = 维修记录</li>
+                        <li><span class="legend-dot" style="background: #f87171;"></span> <strong>红色节点</strong> = 飞机型号</li>
+                        <li><span class="legend-dot" style="background: #fbbf24;"></span> <strong>黄色节点</strong> = 事故类型</li>
+                        <li><span class="legend-dot" style="background: #4ade80;"></span> <strong>绿色节点</strong> = 制造商</li>
+                    </ul>
+                    <p class="viz-hint">💡 拖动节点可调整位置（双击释放），滚轮缩放</p>
+                </div>
+                <div class="viz-stats" id="kg-stats"></div>
+                <div class="viz-container" id="kg-container"></div>
+                <button class="btn btn-outline btn-sm" onclick="loadKnowledgeGraph()">🔄 重新加载</button>
+            </div>
+        </div>
+
+        <!-- 向量空间可视化 -->
+        <div class="viz-section">
+            <div class="viz-header" onclick="toggleVizSection('vector-space')">
+                <h3>🎯 向量空间可视化</h3>
+                <span class="viz-toggle" id="toggle-vector-space">▶</span>
+            </div>
+            <div class="viz-content" id="viz-vector-space" style="display: none;">
+                <div class="viz-description">
+                    <p>每条航空维修记录经过 AI Embedding 模型转换为向量，再用 t-SNE 降维到 2D 平面绘制散点图。</p>
+                    <ul>
+                        <li><strong>每个点</strong> = 一条维修记录</li>
+                        <li><strong>距离近的点</strong> = 语义相似的记录</li>
+                        <li><strong>颜色</strong> = 按数据来源分组（FAA/MaintNet）</li>
+                    </ul>
+                    <p class="viz-hint">💡 悬停点查看详情，滚轮缩放，拖动平移</p>
+                </div>
+                <div class="viz-stats" id="vs-stats"></div>
+                <div class="viz-container" id="vs-container"></div>
+                <button class="btn btn-outline btn-sm" onclick="loadVectorSpace()">🔄 重新加载</button>
+            </div>
+        </div>
+
+        <button id="btn-refresh-stats" class="btn btn-outline" style="margin-top: 16px;">🔄 刷新数据</button>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

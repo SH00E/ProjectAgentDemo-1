@@ -1,0 +1,135 @@
+{
+  "dataset_name": "OMIn Aviation Maintenance",
+  "description": "Operations and Maintenance Intelligence Dataset - Aviation domain",
+  "sources": {
+    "faa": {
+      "file": "faa/faa_records.csv",
+      "type": "maintenance_records",
+      "description": "FAA Accident/Incident Data - maintenance related records"
+    },
+    "maintnet": {
+      "file": "maintnet/maintnet_records.csv",
+      "type": "maintenance_records",
+      "description": "MaintNet Aircraft Maintenance Data"
+    },
+    "abbreviations": {
+      "file": "maintnet/aviation_abbreviations.csv",
+      "type": "reference_data",
+      "description": "Aviation abbreviations (e.g., ACFT=Aircraft)"
+    },
+    "grammar": {
+      "file": "maintnet/aviation_grammar.csv",
+      "type": "reference_data",
+      "description": "Aviation grammar with POS tags"
+    },
+    "terms": {
+      "file": "maintnet/aviation_terms.csv",
+      "type": "reference_data",
+      "description": "Aviation terminology with examples"
+    },
+    "relations": {
+      "file": "relations/rebel_relations.csv",
+      "type": "knowledge_relations",
+      "description": "REBEL extracted relations (head, relation, tail)"
+    },
+    "entities": {
+      "file": "faa/faa_entities.csv",
+      "type": "named_entities",
+      "description": "spaCy NER extracted entities"
+    }
+  },
+  "neo4j_schema": {
+    "node_types": [
+      {
+        "label": "Aircraft",
+        "key": "aircraft_model",
+        "description": "飞机型号"
+      },
+      {
+        "label": "Manufacturer",
+        "key": "manufacturer",
+        "description": "制造商"
+      },
+      {
+        "label": "IncidentType",
+        "key": "accident_type",
+        "description": "事故类型"
+      },
+      {
+        "label": "Location",
+        "key": "state",
+        "description": "地点"
+      },
+      {
+        "label": "Entity",
+        "key": "entity_text",
+        "description": "NER识别的实体"
+      },
+      {
+        "label": "Record",
+        "key": "record_id",
+        "description": "维修记录"
+      },
+      {
+        "label": "Term",
+        "key": "word",
+        "description": "航空术语"
+      },
+      {
+        "label": "Abbreviation",
+        "key": "abbreviation",
+        "description": "航空缩写"
+      }
+    ],
+    "relation_types": [
+      {
+        "type": "HAS_FAULT",
+        "from": "Record",
+        "to": "IncidentType"
+      },
+      {
+        "type": "INVOLVES_AIRCRAFT",
+        "from": "Record",
+        "to": "Aircraft"
+      },
+      {
+        "type": "MANUFACTURED_BY",
+        "from": "Aircraft",
+        "to": "Manufacturer"
+      },
+      {
+        "type": "OCCURRED_IN",
+        "from": "Record",
+        "to": "Location"
+      },
+      {
+        "type": "HAS_ENTITY",
+        "from": "Record",
+        "to": "Entity"
+      },
+      {
+        "type": "RELATED_TO",
+        "from": "Entity",
+        "to": "Entity",
+        "description": "REBEL抽取的关系"
+      },
+      {
+        "type": "HAS_EXAMPLE",
+        "from": "Term",
+        "to": "Record",
+        "description": "术语在记录中的示例"
+      }
+    ]
+  },
+  "qdrant_config": {
+    "collection_name": "rag_knowledge_base",
+    "vector_size": 384,
+    "distance": "cosine",
+    "text_fields": [
+      "description",
+      "problem",
+      "action",
+      "example"
+    ]
+  }
+}

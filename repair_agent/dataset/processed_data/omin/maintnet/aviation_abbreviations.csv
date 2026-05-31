@@ -1,0 +1,66 @@
+code,abbreviation,full_description,source
+1001,AGL,above ground level,maintnet_abbreviation
+1002,AF,airway facilities,maintnet_abbreviation
+1003,ALM,alarm,maintnet_abbreviation
+1004,ALT,alternator,maintnet_abbreviation
+1005,APCH,approach,maintnet_abbreviation
+1006,ASSY,assembly,maintnet_abbreviation
+1007,ASST,assistant,maintnet_abbreviation
+1008,BATT,battery,maintnet_abbreviation
+1009,CO,carbon monoxide,maintnet_abbreviation
+1010,CARB,carburetor,maintnet_abbreviation
+1011,CH,channel,maintnet_abbreviation
+1012,CK,check,maintnet_abbreviation
+1013,COMP,compressor,maintnet_abbreviation
+1014,CW,continuous wave,maintnet_abbreviation
+1015,CKN,crookston municipal airport,maintnet_abbreviation
+1016,CO,cuttoff,maintnet_abbreviation
+1017,CYL,cylinder,maintnet_abbreviation
+1018,CHT,cylinder head temperature,maintnet_abbreviation
+1019,DMG,damage,maintnet_abbreviation
+1020,DI,direction indicator,maintnet_abbreviation
+1021,ENG,engine,maintnet_abbreviation
+1022,EXH,exhaust,maintnet_abbreviation
+1023,EGT,exhaust gas temperature,maintnet_abbreviation
+1024,EXT,external,maintnet_abbreviation
+1025,FAA,federal aviation administration,maintnet_abbreviation
+1026,FLT,flight,maintnet_abbreviation
+1027,FL,flight level,maintnet_abbreviation
+1028,FOD,foreign object damage,maintnet_abbreviation
+1029,FWD,forward,maintnet_abbreviation
+1030,GOV,governor,maintnet_abbreviation
+1031,GFK,grand forks,maintnet_abbreviation
+1032,HR,hour,maintnet_abbreviation
+1033,HYD,hydraulic,maintnet_abbreviation
+1034,ID,identifier,maintnet_abbreviation
+1035,IGN,ignition,maintnet_abbreviation
+1036,IB,inboard,maintnet_abbreviation
+1037,INOP,inoperable,maintnet_abbreviation
+1038,INSPN,inspection,maintnet_abbreviation
+1039,LDG,landing gear,maintnet_abbreviation
+1040,LE,leading-edge,maintnet_abbreviation
+1041,LWR,lower,maintnet_abbreviation
+1042,MI,magnetic indicator,maintnet_abbreviation
+1043,MAG,magnetos,maintnet_abbreviation
+1044,MX,maintenance,maintnet_abbreviation
+1045,MAN,manual,maintnet_abbreviation
+1046,MFG,manufacturing,maintnet_abbreviation
+1047,MIXT,mixture,maintnet_abbreviation
+1048,EWR,newark liberty international airport,maintnet_abbreviation
+1049,ND,north dakota,maintnet_abbreviation
+1050,NLG,nose landing gear,maintnet_abbreviation
+1051,OB,onboard,maintnet_abbreviation
+1052,OPS,operational safety section,maintnet_abbreviation
+1053,PD,pilot drill,maintnet_abbreviation
+1054,PW,pratt and whitney,maintnet_abbreviation
+1055,PN,promissory note,maintnet_abbreviation
+1056,Q,quit,maintnet_abbreviation
+1057,RES,resistance,maintnet_abbreviation
+1058,RP,right pattern,maintnet_abbreviation
+1059,SEC,second,maintnet_abbreviation
+1060,SN,serial number,maintnet_abbreviation
+1061,SB,service bulletin,maintnet_abbreviation
+1062,SVC,serviceable,maintnet_abbreviation
+1063,TWY,taxiway,maintnet_abbreviation
+1064,TEMP,temperature,maintnet_abbreviation
+1065,UKN,unknown,maintnet_abbreviation
