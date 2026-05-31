@@ -555,6 +555,9 @@ async function searchKnowledge() {
                 const score = r.score || 0;
                 const keywords = r.keywords || [];
                 const source = r.source || '知识库';
+                const aircraftModel = r.aircraft_model || '';
+                const manufacturer = r.manufacturer || '';
+                const recordId = r.record_id || '';
 
                 // 高亮关键词
                 let highlightedContent = escapeHtml(content.substring(0, 300));
@@ -582,6 +585,11 @@ async function searchKnowledge() {
                             </div>
                         </div>
                         <div class="search-result-content">${highlightedContent}${content.length > 300 ? '...' : ''}</div>
+                        <div class="search-result-details">
+                            ${aircraftModel ? `<span class="search-tag">🛩️ ${escapeHtml(aircraftModel)}</span>` : ''}
+                            ${manufacturer ? `<span class="search-tag">🏭 ${escapeHtml(manufacturer)}</span>` : ''}
+                            ${recordId ? `<span class="search-tag">🆔 ${escapeHtml(recordId)}</span>` : ''}
+                        </div>
                         <div class="search-result-meta">
                             <span>📍 来源: ${escapeHtml(source)}</span>
                         </div>

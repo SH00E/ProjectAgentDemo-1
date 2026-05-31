@@ -345,7 +345,7 @@ async def diagnose(
 
 @app.post("/api/search")
 async def search_knowledge(request: Request):
-    """知识检索"""
+    """知识检索 - 直接使用Qdrant搜索"""
     if agent_state["agent"] is None:
         return JSONResponse(status_code=503, content={"error": "系统未就绪"})
 
@@ -355,23 +355,56 @@ async def search_knowledge(request: Request):
         return JSONResponse(status_code=400, content={"error": "请输入查询内容"})
 
     try:
-        results = agent_state["agent"].search_knowledge(query, limit=5)
-        # 增强结果格式
+        from qdrant_client import QdrantClient
+        from hello_agents.memory.embedding import get_text_embedder
+        
+        # 直接连接Qdrant搜索
+        client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
+        embedder = get_text_embedder()
+        
+        # 检查集合
+        collections = [c.name for c in client.get_collections().collections]
+        collection_name = "aviation_knowledge_base" if "aviation_knowledge_base" in collections else "rag_knowledge_base"
+        
+        # 向量化查询
+        vector = embedder.encode(query).tolist()
+        
+        # 搜索
+        results = client.query_points(
+            collection_name=collection_name,
+            query=vector,
+            limit=5,
+            with_payload=True
+        ).points
+        
+        # 格式化结果
         enhanced_results = []
         for r in results:
-            content = r.get("content", str(r))
-            score = r.get("score", 0)
+            payload = r.payload or {}
+            source = payload.get("source", "unknown")
+            source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "知识库"
+            
             # 提取关键词
             keywords = query.split()
+            
+            content = payload.get("content", payload.get("text", ""))
+            
             enhanced_results.append({
                 "content": content,
-                "score": score,
+                "score": r.score,
                 "keywords": keywords,
-                "source": r.get("source", "知识库"),
-                "timestamp": r.get("timestamp", "")
+                "source": source_label,
+                "record_id": payload.get("record_id", ""),
+                "aircraft_model": payload.get("aircraft_model", ""),
+                "manufacturer": payload.get("manufacturer", ""),
+                "description": payload.get("description", ""),
+                "problem": payload.get("problem", ""),
+                "action": payload.get("action", "")
             })
+        
         return {"success": True, "results": enhanced_results, "query": query}
     except Exception as e:
+        logger.error(f"搜索失败: {e}")
         return JSONResponse(status_code=500, content={"error": f"检索失败: {e}"})
 
 @app.post("/api/case")
