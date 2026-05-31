@@ -2,6 +2,7 @@
 """
 故障诊断引擎模块
 负责故障诊断、损伤评估、方案推荐
+支持 Neo4j + Qdrant 循环检索
 """
 
 import os
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 class RepairDiagnosisEngine:
     """
     故障诊断引擎
-    结合RAG知识库和LLM进行智能诊断
+    结合 Neo4j 知识图谱、Qdrant 向量库和 LLM 进行智能诊断
     """
     
     def __init__(self, rag_tool, memory_tool, llm, vision_llm=None):
@@ -33,6 +34,7 @@ class RepairDiagnosisEngine:
         self.memory = memory_tool
         self.llm = llm
         self.vision_llm = vision_llm
+        self.max_rounds = 2  # 最大检索轮数
         logger.info("✅ 故障诊断引擎初始化完成")
     
     # ==================== 核心诊断功能 ====================
@@ -149,6 +151,148 @@ class RepairDiagnosisEngine:
                 pass
             return []
     
+    def _query_neo4j(self, keywords: List[str]) -> List[Dict]:
+        """
+        从 Neo4j 知识图谱查询相关信息
+        
+        Args:
+            keywords: 关键词列表（飞机型号、制造商、故障类型等）
+            
+        Returns:
+            List[Dict]: 查询结果
+        """
+        try:
+            from neo4j import GraphDatabase
+            
+            driver = GraphDatabase.driver(
+                os.getenv("NEO4J_URI", "bolt://localhost:7687"),
+                auth=(os.getenv("NEO4J_USERNAME", "neo4j"), os.getenv("NEO4J_PASSWORD", "12345678"))
+            )
+            
+            results = []
+            
+            with driver.session() as session:
+                for keyword in keywords:
+                    keyword = keyword.strip()
+                    if not keyword:
+                        continue
+                    
+                    # 查询飞机型号
+                    r = session.run("""
+                        MATCH (a:AircraftModel)
+                        WHERE a.name CONTAINS $keyword
+                        OPTIONAL MATCH (a)-[:MANUFACTURED_BY]->(m:Manufacturer)
+                        OPTIONAL MATCH (rec:AviationRecord)-[:INVOLVES_AIRCRAFT]->(a)
+                        OPTIONAL MATCH (rec)-[:HAS_INCIDENT_TYPE]->(t:IncidentType)
+                        RETURN DISTINCT 
+                            'Aircraft' AS type,
+                            a.name AS name,
+                            collect(DISTINCT m.name)[..3] AS manufacturers,
+                            collect(DISTINCT t.name)[..5] AS incident_types,
+                            count(DISTINCT rec) AS record_count
+                        LIMIT 5
+                    """, keyword=keyword)
+                    
+                    for record in r:
+                        results.append({
+                            "type": "Aircraft",
+                            "name": record["name"],
+                            "manufacturers": record["manufacturers"],
+                            "incident_types": record["incident_types"],
+                            "record_count": record["record_count"],
+                            "source": "neo4j"
+                        })
+                    
+                    # 查询制造商
+                    r = session.run("""
+                        MATCH (m:Manufacturer)
+                        WHERE m.name CONTAINS $keyword
+                        OPTIONAL MATCH (a:AircraftModel)-[:MANUFACTURED_BY]->(m)
+                        RETURN DISTINCT 
+                            'Manufacturer' AS type,
+                            m.name AS name,
+                            collect(DISTINCT a.name)[..5] AS aircraft_models,
+                            count(DISTINCT a) AS aircraft_count
+                        LIMIT 5
+                    """, keyword=keyword)
+                    
+                    for record in r:
+                        results.append({
+                            "type": "Manufacturer",
+                            "name": record["name"],
+                            "aircraft_models": record["aircraft_models"],
+                            "aircraft_count": record["aircraft_count"],
+                            "source": "neo4j"
+                        })
+                    
+                    # 查询事故类型
+                    r = session.run("""
+                        MATCH (t:IncidentType)
+                        WHERE t.name CONTAINS $keyword
+                        OPTIONAL MATCH (rec:AviationRecord)-[:HAS_INCIDENT_TYPE]->(t)
+                        OPTIONAL MATCH (rec)-[:INVOLVES_AIRCRAFT]->(a:AircraftModel)
+                        RETURN DISTINCT 
+                            'IncidentType' AS type,
+                            t.name AS name,
+                            collect(DISTINCT a.name)[..5] AS related_aircraft,
+                            count(DISTINCT rec) AS record_count
+                        LIMIT 5
+                    """, keyword=keyword)
+                    
+                    for record in r:
+                        results.append({
+                            "type": "IncidentType",
+                            "name": record["name"],
+                            "related_aircraft": record["related_aircraft"],
+                            "record_count": record["record_count"],
+                            "source": "neo4j"
+                        })
+            
+            driver.close()
+            return results
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Neo4j 查询失败: {e}")
+            return []
+    
+    def _extract_keywords(self, description: str) -> List[str]:
+        """
+        从故障描述中提取关键词
+        
+        Args:
+            description: 故障描述
+            
+        Returns:
+            List[str]: 关键词列表
+        """
+        try:
+            prompt = f"""请从以下故障描述中提取关键词，用于知识图谱查询。
+            
+【故障描述】
+{description}
+
+请提取以下类型的关键词（每类1-3个，用逗号分隔）：
+1. 飞机型号（如 CESSNA, BELL, BOEING 等）
+2. 制造商名称
+3. 故障类型或现象（如 engine failure, landing gear 等）
+4. 相关部件名称
+
+只返回关键词，用逗号分隔，不要其他内容。"""
+
+            messages = [
+                {"role": "system", "content": "你是一个关键词提取助手。"},
+                {"role": "user", "content": prompt}
+            ]
+            
+            response = self.llm.invoke(messages)
+            keywords = [kw.strip() for kw in response.split(",") if kw.strip()]
+            return keywords[:10]  # 最多10个关键词
+            
+        except Exception as e:
+            logger.warning(f"⚠️ 关键词提取失败: {e}")
+            # 简单分词作为备选
+            return description.split()[:5]
+    
     def _store_image_memory(self, image_path: str, description: str):
         """存储照片到感知记忆"""
         try:
@@ -214,79 +358,136 @@ class RepairDiagnosisEngine:
     
     def diagnose_with_stream(self, description: str, image_path: str = None):
         """
-        流式诊断 - 逐步 yield 中间过程
+        流式诊断 - 循环检索流程
+        
+        流程：
+        1. 提取关键词
+        2. 查询 Neo4j 知识图谱
+        3. 查询 Qdrant 向量库
+        4. LLM 判断是否需要继续检索
+        5. 循环（最多2轮）
+        6. 最终诊断
         
         Yields:
-            ("step", "步骤描述")  — 进度步骤
-            ("rag", knowledge_results) — RAG检索结果
-            ("analysis", chunk) — LLM流式分析文本
-            ("diagnosis", final_result) — 最终诊断结果
+            ("step", "步骤描述")
+            ("rag", knowledge_results) — 检索结果
+            ("neo4j", neo4j_results) — 知识图谱结果
+            ("analysis", chunk) — LLM流式分析
+            ("diagnosis", final_result) — 最终诊断
         """
-        # 步骤1: 检索知识
-        yield ("step", "🔍 正在检索知识库...")
-        knowledge_results = self._retrieve_knowledge(description)
-        yield ("rag", knowledge_results)
-        
-        # 步骤2: 分析照片
+        all_evidence = []  # 所有证据
         image_analysis = ""
         image_stored = False
+        
+        # 处理照片
         if isinstance(image_path, str) and image_path and os.path.exists(image_path):
             if self.vision_llm:
                 yield ("step", "👁️ 正在分析现场照片...")
                 image_analysis = self._analyze_image(image_path)
-                yield ("step", f"📸 照片分析完成")
+                yield ("step", "📸 照片分析完成")
             else:
                 yield ("step", "📸 正在存储现场照片...")
             self._store_image_memory(image_path, description)
             image_stored = True
         
-        # 步骤3: LLM流式分析
-        yield ("step", "🧠 正在分析故障原因...")
-        knowledge_context = ""
-        if isinstance(knowledge_results, (list, tuple)) and len(knowledge_results) > 0:
-            knowledge_context = "\n\n【参考知识】\n"
-            for i, k in enumerate(knowledge_results[:3], 1):
-                content = k.get("content", str(k))
-                knowledge_context += f"{i}. {content[:500]}\n"
+        # 第一轮：提取关键词并查询
+        yield ("step", "🔍 第1轮：提取关键信息...")
         
-        image_context = ""
-        if image_analysis:
-            image_context = f"\n\n【现场照片分析】\n{image_analysis}\n"
+        # 提取关键词
+        keywords = self._extract_keywords(description)
+        yield ("step", f"📝 提取到关键词: {', '.join(keywords[:5])}")
         
-        analysis_prompt = f"""你是一个专业的消费电子产品维修诊断专家。请根据以下故障描述，逐步分析可能的原因。
-
-【故障描述】
-{description}
-{knowledge_context}{image_context}
-
-请按以下格式输出分析过程：
-1. 首先识别设备类型和故障现象
-2. 然后列出可能的原因（2-3个）
-3. 评估紧急程度和对使用的影响
-4. 给出初步建议
-
-请用简洁的中文回答。"""
-
+        # 查询 Neo4j
+        yield ("step", "🗄️ 正在查询知识图谱 (Neo4j)...")
+        neo4j_results = self._query_neo4j(keywords)
+        if neo4j_results:
+            yield ("neo4j", neo4j_results)
+            all_evidence.extend([{
+                "content": f"[知识图谱] {r.get('name', '')} - 类型: {r.get('type', '')}",
+                "score": 0.9,
+                "source": "neo4j",
+                "source_label": "知识图谱",
+                "details": r
+            } for r in neo4j_results[:5]])
+            yield ("step", f"✅ 从知识图谱找到 {len(neo4j_results)} 条相关信息")
+        
+        # 查询 Qdrant
+        yield ("step", "📚 正在查询向量知识库 (Qdrant)...")
+        qdrant_results = self._retrieve_knowledge(description)
+        if qdrant_results:
+            yield ("rag", qdrant_results)
+            all_evidence.extend(qdrant_results[:5])
+            yield ("step", f"✅ 从向量库找到 {len(qdrant_results)} 条相关记录")
+        
+        # LLM 分析第一轮结果，判断是否需要继续
+        yield ("step", "🧠 正在分析第一轮检索结果...")
+        
+        # 构建上下文
+        context = self._build_context(description, neo4j_results, qdrant_results, image_analysis)
+        
+        # LLM 判断是否需要更多信息
+        need_more = False
+        if len(neo4j_results) < 2 and len(qdrant_results) < 2:
+            need_more = True
+            yield ("step", "📊 检索结果较少，尝试扩大搜索范围...")
+        
+        # 第二轮（如果需要）
+        if need_more and self.max_rounds >= 2:
+            yield ("step", "🔍 第2轮：扩大搜索范围...")
+            
+            # 使用更宽泛的关键词
+            broader_keywords = self._extract_broader_keywords(description, keywords)
+            if broader_keywords:
+                yield ("step", f"📝 扩展关键词: {', '.join(broader_keywords[:5])}")
+                
+                # 再次查询 Neo4j
+                neo4j_results_2 = self._query_neo4j(broader_keywords)
+                if neo4j_results_2:
+                    yield ("neo4j", neo4j_results_2)
+                    all_evidence.extend([{
+                        "content": f"[知识图谱] {r.get('name', '')} - 类型: {r.get('type', '')}",
+                        "score": 0.85,
+                        "source": "neo4j",
+                        "source_label": "知识图谱",
+                        "details": r
+                    } for r in neo4j_results_2[:3]])
+                    yield ("step", f"✅ 第2轮从知识图谱找到 {len(neo4j_results_2)} 条信息")
+                
+                # 再次查询 Qdrant（使用不同角度的查询）
+                broader_query = f"{description} {' '.join(broader_keywords[:3])}"
+                qdrant_results_2 = self._retrieve_knowledge(broader_query)
+                if qdrant_results_2:
+                    yield ("rag", qdrant_results_2)
+                    all_evidence.extend(qdrant_results_2[:3])
+                    yield ("step", f"✅ 第2轮从向量库找到 {len(qdrant_results_2)} 条记录")
+        
+        # 最终诊断
+        yield ("step", "🧠 正在综合分析所有证据...")
+        
+        # 流式输出分析过程
+        analysis_prompt = self._build_analysis_prompt(description, all_evidence, image_analysis)
         messages = [
-            {"role": "system", "content": "你是一个专业的消费电子产品维修诊断专家。"},
+            {"role": "system", "content": "你是一个专业的航空维修诊断专家。"},
             {"role": "user", "content": analysis_prompt}
         ]
         
-        # 流式输出分析过程
         analysis_text = ""
         for chunk in self.llm.stream_invoke(messages):
             analysis_text += chunk
             yield ("analysis", chunk)
         
-        # 步骤4: 结构化诊断
+        # 结构化诊断
         yield ("step", "📋 正在生成结构化诊断...")
-        diagnosis_result = self._analyze_with_llm(description, knowledge_results, image_analysis)
+        diagnosis_result = self._analyze_with_llm(description, all_evidence, image_analysis)
         
-        # 步骤5: 损伤评估
+        # 损伤评估
         severity = self.assess_severity(diagnosis_result)
         
-        # 步骤6: 记录
+        # 记录
         self._record_diagnosis(description, diagnosis_result, severity)
+        
+        # 去重证据
+        unique_evidence = self._deduplicate_evidence(all_evidence)
         
         final = {
             "success": True,
@@ -294,11 +495,102 @@ class RepairDiagnosisEngine:
             "image_stored": image_stored,
             "diagnosis": diagnosis_result,
             "severity": severity,
-            "knowledge_references": knowledge_results[:3],
+            "knowledge_references": unique_evidence[:10],
             "analysis_text": analysis_text,
+            "neo4j_count": len([e for e in all_evidence if e.get("source") == "neo4j"]),
+            "qdrant_count": len([e for e in all_evidence if e.get("source") != "neo4j"]),
             "timestamp": datetime.now().isoformat()
         }
         yield ("diagnosis", final)
+    
+    def _extract_broader_keywords(self, description: str, original_keywords: List[str]) -> List[str]:
+        """提取更宽泛的关键词"""
+        try:
+            prompt = f"""基于以下故障描述和已提取的关键词，请提供更宽泛的搜索关键词。
+
+【故障描述】
+{description}
+
+【已提取关键词】
+{', '.join(original_keywords)}
+
+请提供相关的上位概念或同义词（如 "CESSNA" -> "aircraft", "engine failure" -> "engine"）。
+只返回关键词，用逗号分隔，不要其他内容。"""
+
+            messages = [
+                {"role": "system", "content": "你是一个关键词扩展助手。"},
+                {"role": "user", "content": prompt}
+            ]
+            
+            response = self.llm.invoke(messages)
+            keywords = [kw.strip() for kw in response.split(",") if kw.strip()]
+            # 过滤掉已有的关键词
+            new_keywords = [kw for kw in keywords if kw not in original_keywords]
+            return new_keywords[:5]
+            
+        except Exception as e:
+            logger.warning(f"⚠️ 关键词扩展失败: {e}")
+            return []
+    
+    def _build_context(self, description: str, neo4j_results: List, 
+                       qdrant_results: List, image_analysis: str) -> str:
+        """构建上下文"""
+        context = f"【故障描述】\n{description}\n"
+        
+        if neo4j_results:
+            context += "\n\n【知识图谱信息】\n"
+            for i, r in enumerate(neo4j_results[:5], 1):
+                context += f"{i}. {r.get('name', '')} ({r.get('type', '')})\n"
+        
+        if qdrant_results:
+            context += "\n\n【相似案例】\n"
+            for i, r in enumerate(qdrant_results[:3], 1):
+                content = r.get("content", "")[:200]
+                context += f"{i}. {content}\n"
+        
+        if image_analysis:
+            context += f"\n\n【照片分析】\n{image_analysis}\n"
+        
+        return context
+    
+    def _build_analysis_prompt(self, description: str, evidence: List, image_analysis: str) -> str:
+        """构建分析提示词"""
+        evidence_context = ""
+        if evidence:
+            evidence_context = "\n\n【检索到的证据】\n"
+            for i, e in enumerate(evidence[:8], 1):
+                source = e.get("source_label", "未知")
+                content = e.get("content", "")[:150]
+                evidence_context += f"{i}. [{source}] {content}\n"
+        
+        image_context = ""
+        if image_analysis:
+            image_context = f"\n\n【照片分析】\n{image_analysis}\n"
+        
+        return f"""你是一个专业的航空维修诊断专家。请根据以下信息进行综合分析。
+
+【故障描述】
+{description}
+{evidence_context}{image_context}
+
+请按以下步骤分析：
+1. 识别故障类型和严重程度
+2. 分析可能的原因（基于检索到的证据）
+3. 评估对飞行安全的影响
+4. 给出维修建议
+
+请用简洁的中文回答。"""
+    
+    def _deduplicate_evidence(self, evidence: List[Dict]) -> List[Dict]:
+        """去重证据"""
+        seen = set()
+        unique = []
+        for e in evidence:
+            content = e.get("content", "")
+            if content and content not in seen:
+                seen.add(content)
+                unique.append(e)
+        return unique
     
     def recommend_solution_stream(self, diagnosis_result: Dict):
         """

@@ -487,6 +487,27 @@ textarea {
     margin-top: 4px;
 }
 
+/* Neo4j 知识图谱证据项 */
+.neo4j-item {
+    background: #f0fdf4;
+    border-color: #86efac;
+}
+
+.neo4j-item:hover {
+    border-color: #22c55e;
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.1);
+}
+
+.evidence-type {
+    font-size: 11px;
+    font-weight: 600;
+    color: #166534;
+    background: #dcfce7;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-left: auto;
+}
+
 /* ==================== 工单区域 ==================== */
 
 .order-section {

@@ -79,13 +79,26 @@ def diagnosis_stream(description: str, image_path: str = None):
     for kind, data in agent.process_request_stream(description, image_path):
         if kind == "step":
             yield sse_event("step", {"text": data})
+        elif kind == "neo4j":
+            # 处理 Neo4j 知识图谱结果
+            if data:
+                results = []
+                for r in data[:5]:
+                    results.append({
+                        "type": r.get("type", ""),
+                        "name": r.get("name", ""),
+                        "details": r
+                    })
+                yield sse_event("neo4j", {"results": results, "total": len(data)})
+            else:
+                yield sse_event("neo4j", {"results": [], "total": 0})
         elif kind == "rag":
             if data:
                 results = []
                 for r in data[:5]:
                     # 构建证据链信息
                     source = r.get("source", "unknown")
-                    source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "知识库"
+                    source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "知识图谱" if source == "neo4j" else "知识库"
                     
                     results.append({
                         "content": r.get("content", str(r))[:200],
@@ -113,20 +126,28 @@ def diagnosis_stream(description: str, image_path: str = None):
             # 获取证据链
             knowledge_refs = data.get("knowledge_references", [])
             evidence_chain = []
-            for ref in knowledge_refs[:5]:
+            for ref in knowledge_refs[:8]:
                 source = ref.get("source", "unknown")
-                source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "知识库"
+                source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "知识图谱" if source == "neo4j" else "知识库"
+                
+                # 处理 Neo4j 特有的字段
+                details = ref.get("details", {})
+                aircraft_models = details.get("aircraft_models", [])
+                incident_types = details.get("incident_types", [])
+                
                 evidence_chain.append({
                     "content": ref.get("content", "")[:200],
                     "score": ref.get("score", 0),
                     "source": source,
                     "source_label": source_label,
                     "record_id": ref.get("record_id", ""),
-                    "aircraft_model": ref.get("aircraft_model", ""),
+                    "aircraft_model": ref.get("aircraft_model", "") or (aircraft_models[0] if aircraft_models else ""),
                     "manufacturer": ref.get("manufacturer", ""),
                     "description": ref.get("description", "")[:150],
                     "problem": ref.get("problem", "")[:150],
-                    "action": ref.get("action", "")[:150]
+                    "action": ref.get("action", "")[:150],
+                    "neo4j_type": details.get("type", ""),
+                    "incident_types": incident_types[:3]
                 })
             
             yield sse_event("diagnosis", {
@@ -135,7 +156,9 @@ def diagnosis_stream(description: str, image_path: str = None):
                 "severity_level": sev.get("level", "待评估"),
                 "severity_desc": sev.get("description", ""),
                 "possible_causes": diag.get("possible_causes", []),
-                "evidence_chain": evidence_chain
+                "evidence_chain": evidence_chain,
+                "neo4j_count": data.get("neo4j_count", 0),
+                "qdrant_count": data.get("qdrant_count", 0)
             })
         elif kind == "solution":
             steps = data.get("repair_steps", [])

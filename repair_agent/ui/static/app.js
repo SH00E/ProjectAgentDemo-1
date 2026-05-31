@@ -246,6 +246,10 @@ function handleSSEEvent(eventType, dataStr) {
                 appendToCot(`<div class="cot-step">${escapeHtml(data.text)}</div>`);
                 break;
 
+            case 'neo4j':
+                handleNeo4j(data);
+                break;
+
             case 'rag':
                 handleRAG(data);
                 break;
@@ -276,6 +280,44 @@ function handleSSEEvent(eventType, dataStr) {
         }
     } catch (e) {
         console.error('解析 SSE 事件失败:', e, dataStr);
+    }
+}
+
+function handleNeo4j(data) {
+    if (data.results && data.results.length > 0) {
+        // 在推理过程中显示简要信息
+        appendToCot(`<div class="cot-step-sub">🗄️ 从知识图谱找到 ${data.total} 条相关信息</div>`);
+        
+        // 在证据链区域显示详细信息
+        let html = '<div class="evidence-chain">';
+        data.results.forEach((r, i) => {
+            const typeIcon = r.type === 'Aircraft' ? '🛩️' : r.type === 'Manufacturer' ? '🏭' : r.type === 'IncidentType' ? '⚠️' : '📌';
+            const typeLabel = r.type === 'Aircraft' ? '飞机型号' : r.type === 'Manufacturer' ? '制造商' : r.type === 'IncidentType' ? '事故类型' : '实体';
+            
+            html += `
+                <div class="evidence-item neo4j-item">
+                    <div class="evidence-header">
+                        <span class="evidence-num">#${i + 1}</span>
+                        <span class="evidence-source">${typeIcon} 知识图谱</span>
+                        <span class="evidence-type">${typeLabel}</span>
+                    </div>
+                    <div class="evidence-content"><strong>${escapeHtml(r.name)}</strong></div>
+                    <div class="evidence-details">
+                        ${r.details?.manufacturers ? `<span class="evidence-tag">🏭 ${r.details.manufacturers.join(', ')}</span>` : ''}
+                        ${r.details?.incident_types ? `<span class="evidence-tag">⚠️ ${r.details.incident_types.join(', ')}</span>` : ''}
+                        ${r.details?.aircraft_models ? `<span class="evidence-tag">🛩️ ${r.details.aircraft_models.join(', ')}</span>` : ''}
+                        ${r.details?.record_count ? `<span class="evidence-tag">📊 ${r.details.record_count} 条记录</span>` : ''}
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        
+        // 追加到证据链区域
+        const evidenceArea = document.getElementById('evidence-area');
+        if (evidenceArea) {
+            evidenceArea.innerHTML = html;
+        }
     }
 }
 
