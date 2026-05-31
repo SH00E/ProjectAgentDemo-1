@@ -89,26 +89,64 @@ class RepairDiagnosisEngine:
             }
     
     def _retrieve_knowledge(self, query: str) -> List[Dict]:
-        """检索相关知识"""
+        """检索相关知识 - 直接使用Qdrant获取完整元数据"""
         try:
-            result = self.rag.run({
-                "action": "search",
-                "query": query,
-                "limit": 5,
-                "min_score": 0.2
-            })
+            from qdrant_client import QdrantClient
+            from hello_agents.memory.embedding import get_text_embedder
             
-            # 解析结果 - 确保返回 List[Dict]
-            if isinstance(result, str):
-                return [{"content": result, "score": 0.5}]
-            elif isinstance(result, list):
-                return result
-            elif hasattr(result, 'tolist'):
-                return result.tolist() if len(result) > 0 else []
-            return []
+            # 直接连接Qdrant获取完整结果
+            client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
+            embedder = get_text_embedder()
+            
+            # 检查集合是否存在
+            collections = [c.name for c in client.get_collections().collections]
+            collection_name = "aviation_knowledge_base" if "aviation_knowledge_base" in collections else "rag_knowledge_base"
+            
+            # 向量化查询
+            vector = embedder.encode(query).tolist()
+            
+            # 搜索
+            results = client.query_points(
+                collection_name=collection_name,
+                query=vector,
+                limit=5,
+                with_payload=True
+            ).points
+            
+            # 格式化结果
+            knowledge_list = []
+            for r in results:
+                payload = r.payload or {}
+                knowledge_list.append({
+                    "content": payload.get("content", payload.get("text", "")),
+                    "score": r.score,
+                    "source": payload.get("source", "unknown"),
+                    "record_id": payload.get("record_id", ""),
+                    "aircraft_model": payload.get("aircraft_model", ""),
+                    "manufacturer": payload.get("manufacturer", ""),
+                    "description": payload.get("description", ""),
+                    "problem": payload.get("problem", ""),
+                    "action": payload.get("action", "")
+                })
+            
+            return knowledge_list
             
         except Exception as e:
             logger.warning(f"⚠️ 知识检索失败: {e}")
+            # 回退到RAG工具
+            try:
+                result = self.rag.run({
+                    "action": "search",
+                    "query": query,
+                    "limit": 5,
+                    "min_score": 0.2
+                })
+                if isinstance(result, str):
+                    return [{"content": result, "score": 0.5, "source": "rag"}]
+                elif isinstance(result, list):
+                    return result
+            except:
+                pass
             return []
     
     def _store_image_memory(self, image_path: str, description: str):

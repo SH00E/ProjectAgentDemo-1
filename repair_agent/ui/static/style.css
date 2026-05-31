@@ -320,6 +320,104 @@ textarea {
     margin: 4px 0;
 }
 
+/* ==================== 证据链样式 ==================== */
+
+.evidence-chain {
+    margin: 12px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.evidence-item {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px;
+    transition: all 0.2s;
+}
+
+.evidence-item:hover {
+    border-color: #93c5fd;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
+}
+
+.evidence-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.evidence-num {
+    font-size: 12px;
+    font-weight: 700;
+    color: #3b82f6;
+    background: #dbeafe;
+    padding: 2px 8px;
+    border-radius: 12px;
+}
+
+.evidence-source {
+    font-size: 12px;
+    font-weight: 600;
+    color: #475569;
+    background: #f1f5f9;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.evidence-score {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 12px;
+    margin-left: auto;
+}
+
+.score-high {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.score-medium {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.score-low {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.evidence-content {
+    font-size: 13px;
+    color: #334155;
+    line-height: 1.6;
+    margin-bottom: 8px;
+}
+
+.evidence-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.evidence-tag {
+    font-size: 11px;
+    color: #64748b;
+    background: #f1f5f9;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+}
+
+.evidence-meta {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 4px;
+}
+
 /* ==================== 工单区域 ==================== */
 
 .order-section {

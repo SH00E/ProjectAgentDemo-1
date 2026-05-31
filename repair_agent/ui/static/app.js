@@ -283,9 +283,29 @@ function handleSSEEvent(eventType, dataStr) {
 function handleRAG(data) {
     if (data.results && data.results.length > 0) {
         let html = `<div class="cot-step-sub">📚 检索到 ${data.total} 条相关记录：</div>`;
+        html += '<div class="evidence-chain">';
         data.results.forEach((r, i) => {
-            html += `<div class="cot-rag-item"><strong>${i + 1}.</strong> [${r.score.toFixed(2)}] ${escapeHtml(r.content)}...</div>`;
+            const sourceIcon = r.source === 'faa' ? '✈️' : r.source === 'maintnet' ? '🔧' : '📖';
+            const scorePercent = (r.score * 100).toFixed(0);
+            const scoreClass = r.score >= 0.6 ? 'score-high' : r.score >= 0.4 ? 'score-medium' : 'score-low';
+            
+            html += `
+                <div class="evidence-item">
+                    <div class="evidence-header">
+                        <span class="evidence-source">${sourceIcon} ${escapeHtml(r.source_label)}</span>
+                        <span class="evidence-score ${scoreClass}">${scorePercent}%</span>
+                    </div>
+                    <div class="evidence-content">${escapeHtml(r.content)}</div>
+                    ${r.aircraft_model ? `<div class="evidence-meta">🛩️ 飞机型号: ${escapeHtml(r.aircraft_model)}</div>` : ''}
+                    ${r.manufacturer ? `<div class="evidence-meta">🏭 制造商: ${escapeHtml(r.manufacturer)}</div>` : ''}
+                    ${r.description ? `<div class="evidence-meta">📝 描述: ${escapeHtml(r.description)}</div>` : ''}
+                    ${r.problem ? `<div class="evidence-meta">⚠️ 问题: ${escapeHtml(r.problem)}</div>` : ''}
+                    ${r.action ? `<div class="evidence-meta">🔧 操作: ${escapeHtml(r.action)}</div>` : ''}
+                    ${r.record_id ? `<div class="evidence-meta">🆔 记录ID: ${escapeHtml(r.record_id)}</div>` : ''}
+                </div>
+            `;
         });
+        html += '</div>';
         appendToCot(html);
     } else {
         appendToCot('<div class="cot-step-sub">📚 知识库暂无匹配记录</div>');
@@ -338,6 +358,34 @@ function handleDiagnosis(data) {
 
     if (data.possible_causes && data.possible_causes.length > 0) {
         html += `<div class="cot-text">可能原因: ${data.possible_causes.map(c => escapeHtml(c)).join('、')}</div>`;
+    }
+
+    // 显示证据链
+    if (data.evidence_chain && data.evidence_chain.length > 0) {
+        html += '<div class="cot-step-sub" style="margin-top: 16px;">📎 诊断依据（证据链）：</div>';
+        html += '<div class="evidence-chain">';
+        data.evidence_chain.forEach((ev, i) => {
+            const sourceIcon = ev.source === 'faa' ? '✈️' : ev.source === 'maintnet' ? '🔧' : '📖';
+            const scorePercent = (ev.score * 100).toFixed(0);
+            const scoreClass = ev.score >= 0.6 ? 'score-high' : ev.score >= 0.4 ? 'score-medium' : 'score-low';
+            
+            html += `
+                <div class="evidence-item">
+                    <div class="evidence-header">
+                        <span class="evidence-num">#${i + 1}</span>
+                        <span class="evidence-source">${sourceIcon} ${escapeHtml(ev.source_label)}</span>
+                        <span class="evidence-score ${scoreClass}">${scorePercent}%</span>
+                    </div>
+                    <div class="evidence-content">${escapeHtml(ev.content)}</div>
+                    <div class="evidence-details">
+                        ${ev.aircraft_model ? `<span class="evidence-tag">🛩️ ${escapeHtml(ev.aircraft_model)}</span>` : ''}
+                        ${ev.manufacturer ? `<span class="evidence-tag">🏭 ${escapeHtml(ev.manufacturer)}</span>` : ''}
+                        ${ev.record_id ? `<span class="evidence-tag">🆔 ${escapeHtml(ev.record_id)}</span>` : ''}
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
     }
 
     appendToCot(html);

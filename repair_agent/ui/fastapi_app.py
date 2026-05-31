@@ -82,10 +82,22 @@ def diagnosis_stream(description: str, image_path: str = None):
         elif kind == "rag":
             if data:
                 results = []
-                for r in data[:3]:
+                for r in data[:5]:
+                    # 构建证据链信息
+                    source = r.get("source", "unknown")
+                    source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "知识库"
+                    
                     results.append({
-                        "content": r.get("content", str(r))[:100],
-                        "score": r.get("score", 0)
+                        "content": r.get("content", str(r))[:200],
+                        "score": r.get("score", 0),
+                        "source": source,
+                        "source_label": source_label,
+                        "record_id": r.get("record_id", ""),
+                        "aircraft_model": r.get("aircraft_model", ""),
+                        "manufacturer": r.get("manufacturer", ""),
+                        "description": r.get("description", "")[:150],
+                        "problem": r.get("problem", "")[:150],
+                        "action": r.get("action", "")[:150]
                     })
                 yield sse_event("rag", {"results": results, "total": len(data)})
             else:
@@ -97,12 +109,33 @@ def diagnosis_stream(description: str, image_path: str = None):
         elif kind == "diagnosis":
             diag = data.get("diagnosis", data)
             sev = data.get("severity", {})
+            
+            # 获取证据链
+            knowledge_refs = data.get("knowledge_references", [])
+            evidence_chain = []
+            for ref in knowledge_refs[:5]:
+                source = ref.get("source", "unknown")
+                source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "知识库"
+                evidence_chain.append({
+                    "content": ref.get("content", "")[:200],
+                    "score": ref.get("score", 0),
+                    "source": source,
+                    "source_label": source_label,
+                    "record_id": ref.get("record_id", ""),
+                    "aircraft_model": ref.get("aircraft_model", ""),
+                    "manufacturer": ref.get("manufacturer", ""),
+                    "description": ref.get("description", "")[:150],
+                    "problem": ref.get("problem", "")[:150],
+                    "action": ref.get("action", "")[:150]
+                })
+            
             yield sse_event("diagnosis", {
                 "fault_type": diag.get("fault_type", "未知"),
                 "urgency": diag.get("urgency", "中"),
                 "severity_level": sev.get("level", "待评估"),
                 "severity_desc": sev.get("description", ""),
-                "possible_causes": diag.get("possible_causes", [])
+                "possible_causes": diag.get("possible_causes", []),
+                "evidence_chain": evidence_chain
             })
         elif kind == "solution":
             steps = data.get("repair_steps", [])
