@@ -371,7 +371,7 @@ async def search_knowledge(request: Request):
         results_cn = client.query_points(
             collection_name=collection_name,
             query=vector_cn,
-            limit=5,
+            limit=10,
             with_payload=True
         ).points
         
@@ -390,6 +390,35 @@ async def search_knowledge(request: Request):
                     "problem": payload.get("problem", ""),
                     "action": payload.get("action", "")
                 }
+        
+        # 1.5 额外搜索用户添加的案例
+        try:
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+            user_case_results = client.query_points(
+                collection_name=collection_name,
+                query=vector_cn,
+                query_filter=Filter(must=[FieldCondition(key="source", match=MatchValue(value="user_case"))]),
+                limit=5,
+                with_payload=True
+            ).points
+            
+            for r in user_case_results:
+                payload = r.payload or {}
+                rid = payload.get("record_id", str(r.id))
+                if rid not in all_results or r.score > all_results[rid]["score"]:
+                    all_results[rid] = {
+                        "content": payload.get("content", payload.get("text", "")),
+                        "score": r.score,
+                        "source": payload.get("source", "unknown"),
+                        "record_id": rid,
+                        "aircraft_model": payload.get("aircraft_model", ""),
+                        "manufacturer": payload.get("manufacturer", ""),
+                        "description": payload.get("description", ""),
+                        "problem": payload.get("problem", ""),
+                        "action": payload.get("action", "")
+                    }
+        except Exception as e:
+            logger.warning(f"搜索用户案例失败: {e}")
         
         # 2. 如果是中文，翻译后再次搜索
         has_chinese = any('\u4e00' <= c <= '\u9fff' for c in query)
