@@ -156,10 +156,10 @@ textarea,
 input[type="text"],
 input[type="file"] {
     width: 100%;
-    padding: 10px 12px;
+    padding: 12px 14px;
     border: 1px solid #d1d5db;
     border-radius: 8px;
-    font-size: 14px;
+    font-size: 15px;
     font-family: inherit;
     transition: border-color 0.2s;
 }
@@ -173,7 +173,8 @@ input[type="text"]:focus {
 
 textarea {
     resize: vertical;
-    min-height: 100px;
+    min-height: 150px;
+    line-height: 1.6;
 }
 
 /* 图片预览 */
