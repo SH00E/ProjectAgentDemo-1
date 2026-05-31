@@ -262,14 +262,24 @@ class RepairAgent:
         try:
             order_id = work_order.get("order_info", {}).get("order_id", "N/A")
             fault_type = diagnosis.get("diagnosis", {}).get("fault_type", "未知")
+            severity = diagnosis.get("severity", {}).get("level", "未知")
+            
+            content = f"故障诊断记录 | 工单: {order_id} | 故障类型: {fault_type} | 损伤等级: {severity} | 描述: {description[:80]}"
             
             self.memory_tool.run({
                 "action": "add",
-                "content": f"完成维修处理: {description[:50]}... | 工单: {order_id} | 故障类型: {fault_type}",
+                "content": content,
                 "memory_type": "episodic",
                 "importance": 0.9,
-                "topic": "repair_process"
+                "topic": "diagnosis_history",
+                "metadata": {
+                    "order_id": order_id,
+                    "fault_type": fault_type,
+                    "severity": severity,
+                    "description": description[:200]
+                }
             })
+            logger.info(f"✅ 诊断记录已保存: {order_id}")
         except Exception as e:
             logger.warning(f"⚠️ 记录处理过程失败: {e}")
     

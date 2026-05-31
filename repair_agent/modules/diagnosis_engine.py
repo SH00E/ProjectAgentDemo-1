@@ -581,16 +581,31 @@ class RepairDiagnosisEngine:
             List[Dict]: 历史诊断记录
         """
         try:
+            # 搜索维修处理记录
             result = self.memory.run({
                 "action": "search",
-                "query": "故障诊断记录",
+                "query": "维修处理 工单 故障",
                 "limit": limit,
                 "memory_type": "episodic"
             })
             
             if isinstance(result, str):
+                # 如果返回字符串，可能是没有找到记录
+                if "未找到" in result:
+                    return []
                 return [{"content": result}]
-            return result
+            
+            # 如果返回列表，格式化结果
+            if isinstance(result, list):
+                formatted = []
+                for r in result:
+                    if isinstance(r, dict):
+                        formatted.append(r)
+                    else:
+                        formatted.append({"content": str(r)})
+                return formatted
+            
+            return []
             
         except Exception as e:
             logger.error(f"❌ 获取诊断历史失败: {e}")

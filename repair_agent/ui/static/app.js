@@ -756,12 +756,46 @@ async function refreshStats() {
             const kbStats = stats.knowledge_base?.rag_stats || {};
             const memStats = stats.knowledge_base?.memory_stats || {};
 
-            // 尝试从不同字段获取数据
-            elements.statKbCount.textContent = kbStats.total_documents || kbStats.count || '--';
-            elements.statMemoryCount.textContent = memStats.total_memories || memStats.count || '--';
+            // 从字符串中提取数字
+            let kbCount = '--';
+            let memCount = '--';
+            
+            if (typeof kbStats === 'string') {
+                // 从 "文档分块数: 8917" 中提取数字
+                const kbMatch = kbStats.match(/文档分块数:\s*(\d+)/);
+                if (kbMatch) kbCount = kbMatch[1];
+            } else {
+                kbCount = kbStats.total_documents || kbStats.count || '--';
+            }
+            
+            if (typeof memStats === 'string') {
+                // 从 "总记忆数: 0" 中提取数字
+                const memMatch = memStats.match(/总记忆数:\s*(\d+)/);
+                if (memMatch) memCount = memMatch[1];
+            } else {
+                memCount = memStats.total_memories || memStats.count || '--';
+            }
+
+            elements.statKbCount.textContent = kbCount;
+            elements.statMemoryCount.textContent = memCount;
 
             // 会话信息
-            elements.statSessionId.textContent = stats.system?.session_id || '--';
+            elements.statSessionId.textContent = stats.system?.session_id || stats.session_id || '--';
+            
+            // 诊断历史 - 从单独的API获取
+            try {
+                const historyResponse = await fetch('/api/history');
+                const historyData = await historyResponse.json();
+                if (historyData.success && historyData.history) {
+                    // 过滤掉无效的记录
+                    const validHistory = historyData.history.filter(h => 
+                        h.content && !h.content.includes('未找到')
+                    );
+                    elements.statDiagnosisCount.textContent = validHistory.length;
+                }
+            } catch (histErr) {
+                console.error('获取诊断历史失败:', histErr);
+            }
 
             // 组件状态
             const components = stats.components || [];
