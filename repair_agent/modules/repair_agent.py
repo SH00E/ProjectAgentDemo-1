@@ -84,17 +84,33 @@ class RepairAgent:
         # LLM
         self.llm = HelloAgentsLLM()
         
-        # 视觉LLM（MiMo-V2.5 多模态，用于图片分析）
+        # 视觉LLM（用于图片分析）
         self.vision_llm = None
         vision_key = os.getenv("VISION_API_KEY", "").strip()
-        if vision_key and vision_key != "你的小米API密钥":
+        vision_base_url = os.getenv("VISION_BASE_URL", "").strip()
+        vision_model = os.getenv("VISION_MODEL_ID", "").strip()
+        
+        # 尝试初始化视觉模型
+        if vision_model:
             try:
-                self.vision_llm = HelloAgentsLLM(
-                    model=os.getenv("VISION_MODEL_ID", "mimo-v2.5"),
-                    api_key=vision_key,
-                    base_url=os.getenv("VISION_BASE_URL", "https://api.xiaomimimo.com/v1"),
-                )
-                print("✅ 视觉模型已启用 (MiMo-V2.5)")
+                if vision_key and vision_key != "你的API密钥":
+                    # 使用 API 模式
+                    self.vision_llm = HelloAgentsLLM(
+                        model=vision_model,
+                        api_key=vision_key,
+                        base_url=vision_base_url or "https://api.xiaomimimo.com/v1",
+                    )
+                    print(f"✅ 视觉模型已启用 (API模式): {vision_model}")
+                elif vision_base_url:
+                    # 本地部署模式（如 Ollama、vLLM 等，不需要 API key）
+                    self.vision_llm = HelloAgentsLLM(
+                        model=vision_model,
+                        api_key="not-needed",
+                        base_url=vision_base_url,
+                    )
+                    print(f"✅ 视觉模型已启用 (本地模式): {vision_model}")
+                else:
+                    print("ℹ️ 视觉模型未配置（图片分析功能不可用）")
             except Exception as e:
                 logger.warning(f"⚠️ 视觉模型初始化失败: {e}")
         else:
@@ -229,7 +245,7 @@ class RepairAgent:
                 else:
                     yield (kind, data)
             
-            # 生成工单
+            # 生成工单（纯模板，很快）
             yield ("step", "📋 正在生成维修工单...")
             work_order = self.work_order_generator.generate(
                 description=description,
@@ -238,8 +254,11 @@ class RepairAgent:
                 severity=diagnosis_result.get("severity")
             )
             
-            # 记录
-            self._record_process(description, diagnosis_result, work_order)
+            # 记录（异步，不阻塞）
+            try:
+                self._record_process(description, diagnosis_result, work_order)
+            except Exception as e:
+                logger.warning(f"记录失败: {e}")
             
             order_text = self.work_order_generator.format_order_text(work_order)
             

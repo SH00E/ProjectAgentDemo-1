@@ -20,3 +20,10 @@ tiktoken>=0.5
 beautifulsoup4>=4.12
 networkx>=3.0
 pydantic>=2.0
+scikit-learn>=1.0
+
+# spaCy（知识图谱NER等）
+spacy>=3.0
+# 安装后下载语言模型:
+#   python -m spacy download zh_core_web_sm
+#   python -m spacy download en_core_web_sm

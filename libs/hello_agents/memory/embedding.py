@@ -1,12 +1,12 @@
 """统一嵌入模块（实现 + 提供器）
 
 说明（中文）：
-- 提供统一的文本嵌入接口与多实现：Ollama、本地Transformer、DashScope（通义千问）、TF-IDF兜底。
+- 提供统一的文本嵌入接口与多实现：本地Transformer、DashScope（通义千问）、TF-IDF兜底。
 - 暴露 get_text_embedder()/get_dimension()/refresh_embedder() 供各记忆类型统一使用。
-- 通过环境变量优先级：dashscope/ollama/local > tfidf。
+- 通过环境变量优先级：dashscope > local > tfidf。
 
 环境变量：
-- EMBED_MODEL_TYPE: "dashscope" | "ollama" | "local" | "tfidf"（默认 dashscope）
+- EMBED_MODEL_TYPE: "dashscope" | "local" | "tfidf"（默认 dashscope）
 - EMBED_MODEL_NAME: 模型名称（dashscope默认 text-embedding-v3；local默认 sentence-transformers/all-MiniLM-L6-v2）
 - EMBED_API_KEY: Embedding API Key（统一命名）
 - EMBED_BASE_URL: Embedding Base URL（统一命名，可选）
@@ -149,70 +149,6 @@ class TFIDFEmbedding(EmbeddingModel):
         return self._dimension
 
 
-class OllamaEmbedding(EmbeddingModel):
-    """Ollama 本地嵌入服务。
-
-    支持旧接口 `/api/embeddings`（prompt -> embedding）和新接口 `/api/embed`
-    （input -> embeddings）。当前项目 .env 使用的是 `/api/embeddings`。
-    """
-
-    def __init__(
-        self,
-        model_name: str = "all-minilm:l6-v2",
-        base_url: Optional[str] = None,
-        api_key: Optional[str] = None,
-    ):
-        self.model_name = model_name
-        self.base_url = (base_url or "http://127.0.0.1:11434/api/embeddings").rstrip("/")
-        self.api_key = api_key
-        self._dimension = None
-        test = self.encode("health_check")
-        self._dimension = len(test)
-        print(f"✅ Ollama embedding loaded: model={self.model_name}, dim={self._dimension}")
-
-    def _endpoint(self) -> str:
-        if self.base_url.endswith("/api/embeddings") or self.base_url.endswith("/api/embed"):
-            return self.base_url
-        return self.base_url.rstrip("/") + "/api/embeddings"
-
-    def _headers(self) -> dict:
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        return headers
-
-    def _encode_one(self, text: str):
-        import requests
-
-        url = self._endpoint()
-        if url.endswith("/api/embed"):
-            payload = {"model": self.model_name, "input": text}
-        else:
-            payload = {"model": self.model_name, "prompt": text}
-
-        resp = requests.post(url, headers=self._headers(), json=payload, timeout=30)
-        if resp.status_code >= 400:
-            raise RuntimeError(f"Ollama Embedding 调用失败: {resp.status_code} {resp.text}")
-
-        data = resp.json()
-        embedding = data.get("embedding")
-        if embedding is None:
-            embeddings = data.get("embeddings") or []
-            embedding = embeddings[0] if embeddings else None
-        if not embedding:
-            raise RuntimeError("Ollama Embedding 返回为空或格式不匹配")
-        return np.array(embedding)
-
-    def encode(self, texts: Union[str, List[str]]):
-        if isinstance(texts, str):
-            return self._encode_one(texts)
-        return [self._encode_one(text) for text in texts]
-
-    @property
-    def dimension(self) -> int:
-        return int(self._dimension or 0)
-
-
 class DashScopeEmbedding(EmbeddingModel):
     """阿里云 DashScope（通义千问）Embedding / OpenAI兼容REST 模式
 
@@ -297,65 +233,34 @@ class DashScopeEmbedding(EmbeddingModel):
 def create_embedding_model(model_type: str = "local", **kwargs) -> EmbeddingModel:
     """创建嵌入模型实例
 
-    model_type: "dashscope" | "ollama" | "local" | "tfidf"
+    model_type: "dashscope" | "local" | "tfidf"
     kwargs: model_name, api_key
     """
-    model_type = (model_type or "local").lower()
-    model_name = kwargs.get("model_name")
-    api_key = kwargs.get("api_key")
-    base_url = kwargs.get("base_url")
-
     if model_type in ("local", "sentence_transformer", "huggingface"):
-        local_kwargs = {}
-        if model_name:
-            local_kwargs["model_name"] = model_name
-        return LocalTransformerEmbedding(**local_kwargs)
-    elif model_type == "ollama":
-        ollama_kwargs = {}
-        if model_name:
-            ollama_kwargs["model_name"] = model_name
-        if base_url:
-            ollama_kwargs["base_url"] = base_url
-        if api_key:
-            ollama_kwargs["api_key"] = api_key
-        return OllamaEmbedding(**ollama_kwargs)
+        return LocalTransformerEmbedding(**kwargs)
     elif model_type == "dashscope":
-        dashscope_kwargs = {}
-        if model_name:
-            dashscope_kwargs["model_name"] = model_name
-        if api_key:
-            dashscope_kwargs["api_key"] = api_key
-        if base_url:
-            dashscope_kwargs["base_url"] = base_url
-        return DashScopeEmbedding(**dashscope_kwargs)
+        return DashScopeEmbedding(**kwargs)
     elif model_type == "tfidf":
-        tfidf_kwargs = {}
-        if "max_features" in kwargs:
-            tfidf_kwargs["max_features"] = kwargs["max_features"]
-        return TFIDFEmbedding(**tfidf_kwargs)
+        return TFIDFEmbedding(**kwargs)
     else:
         raise ValueError(f"不支持的模型类型: {model_type}")
 
 
 def create_embedding_model_with_fallback(preferred_type: str = "dashscope", **kwargs) -> EmbeddingModel:
-    """带回退的创建：dashscope/ollama/local -> tfidf"""
+    """带回退的创建：dashscope -> local -> tfidf"""
     if preferred_type in ("sentence_transformer", "huggingface"):
         preferred_type = "local"
-    preferred_type = (preferred_type or "dashscope").lower()
-    fallback = ["dashscope", "ollama", "local", "tfidf"]
+    fallback = ["dashscope", "local", "tfidf"]
     # 将首选放最前
     if preferred_type in fallback:
         fallback.remove(preferred_type)
         fallback.insert(0, preferred_type)
-    errors = []
     for t in fallback:
         try:
             return create_embedding_model(t, **kwargs)
-        except Exception as e:
-            errors.append(f"{t}: {e}")
+        except Exception:
             continue
-    detail = "; ".join(errors)
-    raise RuntimeError(f"所有嵌入模型都不可用，请安装依赖或检查配置 ({detail})")
+    raise RuntimeError("所有嵌入模型都不可用，请安装依赖或检查配置")
 
 
 # ==================
@@ -367,18 +272,9 @@ _embedder: Optional[EmbeddingModel] = None
 
 
 def _build_embedder() -> EmbeddingModel:
-    preferred = os.getenv("EMBED_MODEL_TYPE", "dashscope").strip().lower()
-    base_url = os.getenv("EMBED_BASE_URL", "").strip()
-    if preferred == "local" and _looks_like_ollama_url(base_url):
-        preferred = "ollama"
-
+    preferred = os.getenv("EMBED_MODEL_TYPE", "dashscope").strip()
     # 根据提供商选择默认模型
-    if preferred == "dashscope":
-        default_model = "text-embedding-v3"
-    elif preferred == "ollama":
-        default_model = "all-minilm:l6-v2"
-    else:
-        default_model = "sentence-transformers/all-MiniLM-L6-v2"
+    default_model = "text-embedding-v3" if preferred == "dashscope" else "sentence-transformers/all-MiniLM-L6-v2"
     model_name = os.getenv("EMBED_MODEL_NAME", default_model).strip()
     kwargs = {}
     if model_name:
@@ -387,19 +283,10 @@ def _build_embedder() -> EmbeddingModel:
     api_key = os.getenv("EMBED_API_KEY")
     if api_key:
         kwargs["api_key"] = api_key
+    base_url = os.getenv("EMBED_BASE_URL")
     if base_url:
         kwargs["base_url"] = base_url
     return create_embedding_model_with_fallback(preferred_type=preferred, **kwargs)
-
-
-def _looks_like_ollama_url(base_url: str) -> bool:
-    value = (base_url or "").lower()
-    return bool(value) and (
-        "ollama" in value
-        or ":11434" in value
-        or value.endswith("/api/embeddings")
-        or value.endswith("/api/embed")
-    )
 
 
 def get_text_embedder() -> EmbeddingModel:
@@ -427,4 +314,5 @@ def refresh_embedder() -> EmbeddingModel:
     with _lock:
         _embedder = _build_embedder()
         return _embedder
+
 
