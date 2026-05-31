@@ -2,6 +2,7 @@
 
 import os
 from typing import Literal, Optional, Iterator
+import httpx
 from openai import OpenAI
 
 from .exceptions import HelloAgentsException
@@ -231,10 +232,22 @@ class HelloAgentsLLM:
 
     def _create_client(self) -> OpenAI:
         """创建OpenAI客户端"""
+        http_client = None
+        if self._is_local_base_url(self.base_url):
+            http_client = httpx.Client(trust_env=False, timeout=self.timeout)
         return OpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
-            timeout=self.timeout
+            timeout=self.timeout,
+            http_client=http_client
+        )
+
+    def _is_local_base_url(self, base_url: Optional[str]) -> bool:
+        value = (base_url or "").lower()
+        return (
+            "localhost" in value
+            or "127.0.0.1" in value
+            or value.startswith("http://0.0.0.0")
         )
     
     def _get_default_model(self) -> str:

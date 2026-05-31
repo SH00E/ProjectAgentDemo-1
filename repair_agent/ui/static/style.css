@@ -917,43 +917,14 @@ textarea {
     border-radius: 12px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     margin-bottom: 16px;
-    overflow: hidden;
+    padding: 20px;
 }
 
-.viz-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 16px 20px;
-    cursor: pointer;
-    transition: background 0.2s;
-    user-select: none;
-}
-
-.viz-header:hover {
-    background: #f8fafc;
-}
-
-.viz-header h3 {
-    font-size: 16px;
+.viz-section h3 {
+    font-size: 18px;
     font-weight: 600;
     color: #1e293b;
-    margin: 0;
-}
-
-.viz-toggle {
-    font-size: 14px;
-    color: #64748b;
-    transition: transform 0.3s;
-}
-
-.viz-toggle.expanded {
-    transform: rotate(90deg);
-}
-
-.viz-content {
-    padding: 0 20px 20px 20px;
-    border-top: 1px solid #e2e8f0;
+    margin: 0 0 16px 0;
 }
 
 .viz-description {
@@ -961,7 +932,7 @@ textarea {
     border: 1px solid #b8d4fe;
     border-radius: 8px;
     padding: 16px;
-    margin: 16px 0;
+    margin-bottom: 16px;
     font-size: 14px;
     color: #475569;
 }

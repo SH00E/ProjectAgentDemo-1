@@ -83,7 +83,12 @@ function initTabs() {
 
             // 切换到案例或统计时加载数据
             if (tabName === 'case') loadCases();
-            if (tabName === 'stats') refreshStats();
+            if (tabName === 'stats') {
+                refreshStats();
+                // 自动加载可视化
+                loadKnowledgeGraph();
+                loadVectorSpace();
+            }
         });
     });
 }
@@ -801,7 +806,7 @@ async function loadKnowledgeGraph() {
         // 显示统计信息
         statsDiv.innerHTML = `
             <strong>📊 统计:</strong> 
-            ${stats.devices} 设备 | ${stats.faults} 故障类型 Top15 | ${stats.brands} 品牌 Top20 | 
+            ${stats.aircraft} 飞机型号 | ${stats.incidents} 事故类型 | ${stats.manufacturers} 制造商 | 
             ${stats.total_links} 关系 | ${stats.total_nodes} 节点
         `;
         
@@ -818,18 +823,13 @@ function renderKnowledgeGraph(container, nodes, links) {
     container.innerHTML = '';
     
     const width = container.clientWidth || 900;
-    const height = 600;
+    const height = 500;
     
     // 颜色映射 (航空领域)
     const colorMap = {
-        'Record': '#60a5fa',       // 蓝色 - 维修记录
         'Aircraft': '#f87171',     // 红色 - 飞机型号
         'Incident': '#fbbf24',     // 黄色 - 事故类型
         'Manufacturer': '#4ade80', // 绿色 - 制造商
-        // 兼容旧数据
-        'Device': '#60a5fa',
-        'FaultType': '#f87171',
-        'Brand': '#4ade80'
     };
     
     // 创建SVG
@@ -866,10 +866,10 @@ function renderKnowledgeGraph(container, nodes, links) {
     
     // 创建力导向模拟
     kgSimulation = d3.forceSimulation(nodes)
-        .force('link', d3.forceLink(links).id(d => d.id).distance(120))
-        .force('charge', d3.forceManyBody().strength(-300))
+        .force('link', d3.forceLink(links).id(d => d.id).distance(150))
+        .force('charge', d3.forceManyBody().strength(-500))
         .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('collision', d3.forceCollide().radius(30));
+        .force('collision', d3.forceCollide().radius(40));
     
     // 绘制边
     const link = g.append('g')
@@ -892,12 +892,9 @@ function renderKnowledgeGraph(container, nodes, links) {
             .on('drag', dragged)
             .on('end', dragEnded));
     
-    // 节点圆形
+    // 节点圆形 - 统一大小
     node.append('circle')
-        .attr('r', d => {
-            const degree = links.filter(l => l.source.id === d.id || l.target.id === d.id).length;
-            return 12 + degree * 3;
-        })
+        .attr('r', 20)
         .attr('fill', d => colorMap[d.type] || '#94a3b8')
         .attr('stroke', '#334155')
         .attr('stroke-width', 1.5);
@@ -905,8 +902,8 @@ function renderKnowledgeGraph(container, nodes, links) {
     // 节点标签
     node.append('text')
         .attr('class', 'node-label')
-        .attr('dy', 25)
-        .text(d => d.label.length > 12 ? d.label.substring(0, 12) + '...' : d.label);
+        .attr('dy', 28)
+        .text(d => d.label.length > 10 ? d.label.substring(0, 10) + '...' : d.label);
     
     // 节点提示
     node.append('title')

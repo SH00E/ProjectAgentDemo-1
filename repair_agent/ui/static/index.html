@@ -194,64 +194,38 @@
             </div>
         </div>
 
-        <!-- 详细信息 -->
-        <div class="stats-detail-section">
-            <h3>📈 详细信息</h3>
-            <div class="stats-detail-grid">
-                <div class="detail-card">
-                    <h4>RAG 知识库</h4>
-                    <pre id="stats-rag" class="detail-content">加载中...</pre>
-                </div>
-                <div class="detail-card">
-                    <h4>记忆系统</h4>
-                    <pre id="stats-memory" class="detail-content">加载中...</pre>
-                </div>
-            </div>
-        </div>
-
         <!-- 知识图谱可视化 -->
         <div class="viz-section">
-            <div class="viz-header" onclick="toggleVizSection('knowledge-graph')">
-                <h3>🗺️ 知识图谱可视化</h3>
-                <span class="viz-toggle" id="toggle-knowledge-graph">▶</span>
+            <h3>🗺️ 知识图谱可视化</h3>
+            <div class="viz-description">
+                <p>展示 Neo4j 中存储的航空维修知识图谱，包括飞机型号、事故类型和制造商之间的关联关系。</p>
+                <ul>
+                    <li><span class="legend-dot" style="background: #f87171;"></span> <strong>红色节点</strong> = 飞机型号</li>
+                    <li><span class="legend-dot" style="background: #fbbf24;"></span> <strong>黄色节点</strong> = 事故类型</li>
+                    <li><span class="legend-dot" style="background: #4ade80;"></span> <strong>绿色节点</strong> = 制造商</li>
+                </ul>
+                <p class="viz-hint">💡 拖动节点可调整位置，滚轮缩放</p>
             </div>
-            <div class="viz-content" id="viz-knowledge-graph" style="display: none;">
-                <div class="viz-description">
-                    <p>展示 Neo4j 中存储的航空维修知识图谱，包括维修记录、飞机型号、事故类型和制造商之间的关联关系。</p>
-                    <ul>
-                        <li><span class="legend-dot" style="background: #60a5fa;"></span> <strong>蓝色节点</strong> = 维修记录</li>
-                        <li><span class="legend-dot" style="background: #f87171;"></span> <strong>红色节点</strong> = 飞机型号</li>
-                        <li><span class="legend-dot" style="background: #fbbf24;"></span> <strong>黄色节点</strong> = 事故类型</li>
-                        <li><span class="legend-dot" style="background: #4ade80;"></span> <strong>绿色节点</strong> = 制造商</li>
-                    </ul>
-                    <p class="viz-hint">💡 拖动节点可调整位置（双击释放），滚轮缩放</p>
-                </div>
-                <div class="viz-stats" id="kg-stats"></div>
-                <div class="viz-container" id="kg-container"></div>
-                <button class="btn btn-outline btn-sm" onclick="loadKnowledgeGraph()">🔄 重新加载</button>
-            </div>
+            <div class="viz-stats" id="kg-stats"></div>
+            <div class="viz-container" id="kg-container"></div>
+            <button class="btn btn-outline btn-sm" onclick="loadKnowledgeGraph()">🔄 重新加载</button>
         </div>
 
         <!-- 向量空间可视化 -->
         <div class="viz-section">
-            <div class="viz-header" onclick="toggleVizSection('vector-space')">
-                <h3>🎯 向量空间可视化</h3>
-                <span class="viz-toggle" id="toggle-vector-space">▶</span>
+            <h3>🎯 向量空间可视化</h3>
+            <div class="viz-description">
+                <p>每条航空维修记录经过 AI Embedding 模型转换为向量，再用 t-SNE 降维到 2D 平面绘制散点图。</p>
+                <ul>
+                    <li><strong>每个点</strong> = 一条维修记录</li>
+                    <li><strong>距离近的点</strong> = 语义相似的记录</li>
+                    <li><strong>颜色</strong> = 按数据来源分组（FAA/MaintNet）</li>
+                </ul>
+                <p class="viz-hint">💡 悬停点查看详情，滚轮缩放，拖动平移</p>
             </div>
-            <div class="viz-content" id="viz-vector-space" style="display: none;">
-                <div class="viz-description">
-                    <p>每条航空维修记录经过 AI Embedding 模型转换为向量，再用 t-SNE 降维到 2D 平面绘制散点图。</p>
-                    <ul>
-                        <li><strong>每个点</strong> = 一条维修记录</li>
-                        <li><strong>距离近的点</strong> = 语义相似的记录</li>
-                        <li><strong>颜色</strong> = 按数据来源分组（FAA/MaintNet）</li>
-                    </ul>
-                    <p class="viz-hint">💡 悬停点查看详情，滚轮缩放，拖动平移</p>
-                </div>
-                <div class="viz-stats" id="vs-stats"></div>
-                <div class="viz-container" id="vs-container"></div>
-                <button class="btn btn-outline btn-sm" onclick="loadVectorSpace()">🔄 重新加载</button>
-            </div>
+            <div class="viz-stats" id="vs-stats"></div>
+            <div class="viz-container" id="vs-container"></div>
+            <button class="btn btn-outline btn-sm" onclick="loadVectorSpace()">🔄 重新加载</button>
         </div>
 
         <button id="btn-refresh-stats" class="btn btn-outline" style="margin-top: 16px;">🔄 刷新数据</button>

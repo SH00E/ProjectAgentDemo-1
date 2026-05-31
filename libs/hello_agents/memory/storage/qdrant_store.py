@@ -137,14 +137,16 @@ class QdrantVectorStore:
                 self.client = QdrantClient(
                     url=self.url,
                     api_key=self.api_key,
-                    timeout=self.timeout
+                    timeout=self.timeout,
+                    trust_env=False
                 )
                 logger.info(f"✅ 成功连接到Qdrant云服务: {self.url}")
             elif self.url:
                 # 使用自定义URL（无API密钥）
                 self.client = QdrantClient(
                     url=self.url,
-                    timeout=self.timeout
+                    timeout=self.timeout,
+                    trust_env=False
                 )
                 logger.info(f"✅ 成功连接到Qdrant服务: {self.url}")
             else:
@@ -152,7 +154,8 @@ class QdrantVectorStore:
                 self.client = QdrantClient(
                     host="localhost",
                     port=6333,
-                    timeout=self.timeout
+                    timeout=self.timeout,
+                    trust_env=False
                 )
                 logger.info("✅ 成功连接到本地Qdrant服务: localhost:6333")
             

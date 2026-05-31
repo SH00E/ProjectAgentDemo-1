@@ -311,7 +311,7 @@ async def get_history():
 
 @app.get("/api/stats/knowledge-graph")
 async def get_knowledge_graph():
-    """获取知识图谱数据"""
+    """获取知识图谱数据 - 简化版，只显示飞机型号、事故类型、制造商"""
     try:
         from neo4j import GraphDatabase
         
@@ -325,70 +325,68 @@ async def get_knowledge_graph():
         node_set = set()
         
         with driver.session() as s:
-            # 获取 Top 20 高频飞机型号
+            # 获取 Top 10 高频飞机型号
             top_aircraft = []
             for r in s.run("""
                 MATCH (r:AviationRecord)-[:INVOLVES_AIRCRAFT]->(a:AircraftModel)
                 RETURN a.name AS a, count(r) AS cnt
-                ORDER BY cnt DESC LIMIT 20
+                ORDER BY cnt DESC LIMIT 10
             """):
                 top_aircraft.append(r["a"])
             
-            # 获取 Top 15 事故类型
+            # 获取 Top 8 事故类型
             top_incidents = []
             for r in s.run("""
                 MATCH (r:AviationRecord)-[:HAS_INCIDENT_TYPE]->(t:IncidentType)
                 RETURN t.name AS t, count(r) AS cnt
-                ORDER BY cnt DESC LIMIT 15
+                ORDER BY cnt DESC LIMIT 8
             """):
                 top_incidents.append(r["t"])
             
-            # 获取 Top 20 制造商
+            # 获取 Top 10 制造商
             top_manufacturers = []
             for r in s.run("""
                 MATCH (a:AircraftModel)-[:MANUFACTURED_BY]->(m:Manufacturer)
                 RETURN m.name AS m, count(a) AS cnt
-                ORDER BY cnt DESC LIMIT 20
+                ORDER BY cnt DESC LIMIT 10
             """):
                 top_manufacturers.append(r["m"])
             
-            # 获取记录-飞机型号关系
-            for r in s.run("MATCH (r:AviationRecord)-[:INVOLVES_AIRCRAFT]->(a:AircraftModel) RETURN r.record_id AS rid, a.name AS a"):
-                if r["a"] in top_aircraft:
-                    if r["rid"] not in node_set:
-                        nodes.append({"id": r["rid"], "type": "Record", "label": r["rid"][:15]})
-                        node_set.add(r["rid"])
-                    if r["a"] not in node_set:
-                        nodes.append({"id": r["a"], "type": "Aircraft", "label": r["a"]})
-                        node_set.add(r["a"])
-                    links.append({"source": r["rid"], "target": r["a"], "type": "INVOLVES_AIRCRAFT"})
+            # 添加飞机型号节点
+            for aircraft in top_aircraft:
+                nodes.append({"id": aircraft, "type": "Aircraft", "label": aircraft})
+                node_set.add(aircraft)
             
-            # 获取记录-事故类型关系
-            for r in s.run("MATCH (r:AviationRecord)-[:HAS_INCIDENT_TYPE]->(t:IncidentType) RETURN r.record_id AS rid, t.name AS t"):
-                if r["t"] in top_incidents:
-                    if r["rid"] not in node_set:
-                        nodes.append({"id": r["rid"], "type": "Record", "label": r["rid"][:15]})
-                        node_set.add(r["rid"])
-                    if r["t"] not in node_set:
-                        nodes.append({"id": r["t"], "type": "Incident", "label": r["t"]})
-                        node_set.add(r["t"])
-                    links.append({"source": r["rid"], "target": r["t"], "type": "HAS_INCIDENT_TYPE"})
+            # 添加事故类型节点
+            for incident in top_incidents:
+                nodes.append({"id": incident, "type": "Incident", "label": incident})
+                node_set.add(incident)
+            
+            # 添加制造商节点
+            for mfg in top_manufacturers:
+                nodes.append({"id": mfg, "type": "Manufacturer", "label": mfg})
+                node_set.add(mfg)
+            
+            # 获取飞机型号-事故类型关系（通过记录关联）
+            for r in s.run("""
+                MATCH (a:AircraftModel)<-[:INVOLVES_AIRCRAFT]-(r:AviationRecord)-[:HAS_INCIDENT_TYPE]->(t:IncidentType)
+                WHERE a.name IN $aircrafts AND t.name IN $incidents
+                RETURN DISTINCT a.name AS a, t.name AS t, count(r) AS cnt
+                ORDER BY cnt DESC LIMIT 30
+            """, aircrafts=top_aircraft, incidents=top_incidents):
+                links.append({"source": r["a"], "target": r["t"], "type": "HAS_INCIDENT", "count": r["cnt"]})
             
             # 获取飞机型号-制造商关系
-            for r in s.run("MATCH (a:AircraftModel)-[:MANUFACTURED_BY]->(m:Manufacturer) RETURN a.name AS a, m.name AS m"):
-                if r["m"] in top_manufacturers:
-                    if r["a"] not in node_set:
-                        nodes.append({"id": r["a"], "type": "Aircraft", "label": r["a"]})
-                        node_set.add(r["a"])
-                    if r["m"] not in node_set:
-                        nodes.append({"id": r["m"], "type": "Manufacturer", "label": r["m"]})
-                        node_set.add(r["m"])
-                    links.append({"source": r["a"], "target": r["m"], "type": "MANUFACTURED_BY"})
+            for r in s.run("""
+                MATCH (a:AircraftModel)-[:MANUFACTURED_BY]->(m:Manufacturer)
+                WHERE a.name IN $aircrafts AND m.name IN $manufacturers
+                RETURN DISTINCT a.name AS a, m.name AS m
+            """, aircrafts=top_aircraft, manufacturers=top_manufacturers):
+                links.append({"source": r["a"], "target": r["m"], "type": "MANUFACTURED_BY"})
         
         driver.close()
         
         # 统计信息
-        record_count = sum(1 for n in nodes if n["type"] == "Record")
         aircraft_count = sum(1 for n in nodes if n["type"] == "Aircraft")
         incident_count = sum(1 for n in nodes if n["type"] == "Incident")
         manufacturer_count = sum(1 for n in nodes if n["type"] == "Manufacturer")
@@ -399,7 +397,6 @@ async def get_knowledge_graph():
                 "nodes": nodes,
                 "links": links,
                 "stats": {
-                    "records": record_count,
                     "aircraft": aircraft_count,
                     "incidents": incident_count,
                     "manufacturers": manufacturer_count,
