@@ -132,7 +132,7 @@ def auto_init_agent():
 
 # ==================== FastAPI App ====================
 
-app = FastAPI(title="航空维修智能助手")
+app = FastAPI(title="保障智能助手")
 
 # 挂载静态文件
 static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -274,7 +274,7 @@ async def index(request: Request):
 async def get_status():
     """获取系统状态"""
     if agent_state["agent"] is not None:
-        return {"status": "ready", "message": "✅ 航空维修智能助手已就绪"}
+        return {"status": "ready", "message": "✅ 保障智能助手已就绪"}
     elif agent_state["initting"]:
         return {"status": "initializing", "message": "⏳ 正在初始化..."}
     elif agent_state["init_error"]:
@@ -345,7 +345,7 @@ async def diagnose(
 
 @app.post("/api/search")
 async def search_knowledge(request: Request):
-    """知识检索 - 直接使用Qdrant搜索"""
+    """知识检索 - 支持中英文双语搜索"""
     if agent_state["agent"] is None:
         return JSONResponse(status_code=503, content={"error": "系统未就绪"})
 
@@ -358,49 +358,84 @@ async def search_knowledge(request: Request):
         from qdrant_client import QdrantClient
         from hello_agents.memory.embedding import get_text_embedder
         
-        # 直接连接Qdrant搜索
         client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
         embedder = get_text_embedder()
         
-        # 检查集合
         collections = [c.name for c in client.get_collections().collections]
         collection_name = "aviation_knowledge_base" if "aviation_knowledge_base" in collections else "rag_knowledge_base"
         
-        # 向量化查询
-        vector = embedder.encode(query).tolist()
+        all_results = {}
         
-        # 搜索
-        results = client.query_points(
+        # 1. 用原始查询搜索
+        vector_cn = embedder.encode(query).tolist()
+        results_cn = client.query_points(
             collection_name=collection_name,
-            query=vector,
+            query=vector_cn,
             limit=5,
             with_payload=True
         ).points
         
+        for r in results_cn:
+            payload = r.payload or {}
+            rid = payload.get("record_id", str(r.id))
+            if rid not in all_results or r.score > all_results[rid]["score"]:
+                all_results[rid] = {
+                    "content": payload.get("content", payload.get("text", "")),
+                    "score": r.score,
+                    "source": payload.get("source", "unknown"),
+                    "record_id": rid,
+                    "aircraft_model": payload.get("aircraft_model", ""),
+                    "manufacturer": payload.get("manufacturer", ""),
+                    "description": payload.get("description", ""),
+                    "problem": payload.get("problem", ""),
+                    "action": payload.get("action", "")
+                }
+        
+        # 2. 如果是中文，翻译后再次搜索
+        has_chinese = any('\u4e00' <= c <= '\u9fff' for c in query)
+        if has_chinese:
+            try:
+                llm = agent_state["agent"].llm
+                prompt = f"将以下中文维修故障描述翻译为简洁的英文，只返回翻译结果：\n{query}"
+                query_en = llm.invoke([{"role": "user", "content": prompt}]).strip()
+                
+                vector_en = embedder.encode(query_en).tolist()
+                results_en = client.query_points(
+                    collection_name=collection_name,
+                    query=vector_en,
+                    limit=5,
+                    with_payload=True
+                ).points
+                
+                for r in results_en:
+                    payload = r.payload or {}
+                    rid = payload.get("record_id", str(r.id))
+                    if rid not in all_results or r.score > all_results[rid]["score"]:
+                        all_results[rid] = {
+                            "content": payload.get("content", payload.get("text", "")),
+                            "score": r.score,
+                            "source": payload.get("source", "unknown"),
+                            "record_id": rid,
+                            "aircraft_model": payload.get("aircraft_model", ""),
+                            "manufacturer": payload.get("manufacturer", ""),
+                            "description": payload.get("description", ""),
+                            "problem": payload.get("problem", ""),
+                            "action": payload.get("action", "")
+                        }
+            except Exception as e:
+                logger.warning(f"翻译查询失败: {e}")
+        
+        # 按分数排序，返回前5条
+        sorted_results = sorted(all_results.values(), key=lambda x: x["score"], reverse=True)[:5]
+        
         # 格式化结果
         enhanced_results = []
-        for r in results:
-            payload = r.payload or {}
-            source = payload.get("source", "unknown")
-            source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "知识库"
-            
-            # 提取关键词
-            keywords = query.split()
-            
-            content = payload.get("content", payload.get("text", ""))
-            
-            enhanced_results.append({
-                "content": content,
-                "score": r.score,
-                "keywords": keywords,
-                "source": source_label,
-                "record_id": payload.get("record_id", ""),
-                "aircraft_model": payload.get("aircraft_model", ""),
-                "manufacturer": payload.get("manufacturer", ""),
-                "description": payload.get("description", ""),
-                "problem": payload.get("problem", ""),
-                "action": payload.get("action", "")
-            })
+        for r in sorted_results:
+            source = r.get("source", "unknown")
+            source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "用户案例" if source == "user_case" else "知识库"
+            r["source"] = source_label
+            r["keywords"] = query.split()
+            enhanced_results.append(r)
         
         return {"success": True, "results": enhanced_results, "query": query}
     except Exception as e:
@@ -735,7 +770,7 @@ def launch_app(host="127.0.0.1", port=7860):
     """启动 FastAPI 应用"""
     import uvicorn
     print(f"\n{'='*60}")
-    print(f"[航空维修智能助手] FastAPI Web 界面")
+    print(f"[保障智能助手] FastAPI Web 界面")
     print(f"{'='*60}")
     print(f"启动中...")
     print(f"访问地址: http://{host}:{port}")

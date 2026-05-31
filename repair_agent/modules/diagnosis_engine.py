@@ -90,48 +90,94 @@ class RepairDiagnosisEngine:
                 "description": description
             }
     
+    def _translate_to_english(self, text: str) -> str:
+        """将中文查询翻译为英文，用于向量库搜索"""
+        try:
+            prompt = f"""将以下中文维修故障描述翻译为简洁的英文，保留专业术语，只返回翻译结果不要其他内容：
+
+{text}"""
+            messages = [
+                {"role": "system", "content": "You are a translator. Translate Chinese to English concisely."},
+                {"role": "user", "content": prompt}
+            ]
+            result = self.llm.invoke(messages)
+            return result.strip()
+        except Exception as e:
+            logger.warning(f"⚠️ 翻译失败: {e}")
+            return text
+
     def _retrieve_knowledge(self, query: str) -> List[Dict]:
-        """检索相关知识 - 直接使用Qdrant获取完整元数据"""
+        """检索相关知识 - 支持中英文双语搜索"""
         try:
             from qdrant_client import QdrantClient
             from hello_agents.memory.embedding import get_text_embedder
             
-            # 直接连接Qdrant获取完整结果
             client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
             embedder = get_text_embedder()
             
-            # 检查集合是否存在
             collections = [c.name for c in client.get_collections().collections]
             collection_name = "aviation_knowledge_base" if "aviation_knowledge_base" in collections else "rag_knowledge_base"
             
-            # 向量化查询
-            vector = embedder.encode(query).tolist()
+            all_results = {}
             
-            # 搜索
-            results = client.query_points(
+            # 1. 用原始查询搜索
+            vector_cn = embedder.encode(query).tolist()
+            results_cn = client.query_points(
                 collection_name=collection_name,
-                query=vector,
+                query=vector_cn,
                 limit=5,
                 with_payload=True
             ).points
             
-            # 格式化结果
-            knowledge_list = []
-            for r in results:
+            for r in results_cn:
                 payload = r.payload or {}
-                knowledge_list.append({
-                    "content": payload.get("content", payload.get("text", "")),
-                    "score": r.score,
-                    "source": payload.get("source", "unknown"),
-                    "record_id": payload.get("record_id", ""),
-                    "aircraft_model": payload.get("aircraft_model", ""),
-                    "manufacturer": payload.get("manufacturer", ""),
-                    "description": payload.get("description", ""),
-                    "problem": payload.get("problem", ""),
-                    "action": payload.get("action", "")
-                })
+                rid = payload.get("record_id", str(r.id))
+                if rid not in all_results or r.score > all_results[rid]["score"]:
+                    all_results[rid] = {
+                        "content": payload.get("content", payload.get("text", "")),
+                        "score": r.score,
+                        "source": payload.get("source", "unknown"),
+                        "record_id": rid,
+                        "aircraft_model": payload.get("aircraft_model", ""),
+                        "manufacturer": payload.get("manufacturer", ""),
+                        "description": payload.get("description", ""),
+                        "problem": payload.get("problem", ""),
+                        "action": payload.get("action", "")
+                    }
             
-            return knowledge_list
+            # 2. 如果是中文，翻译后再次搜索
+            has_chinese = any('\u4e00' <= c <= '\u9fff' for c in query)
+            if has_chinese:
+                query_en = self._translate_to_english(query)
+                logger.info(f"📝 翻译查询: {query} -> {query_en}")
+                
+                vector_en = embedder.encode(query_en).tolist()
+                results_en = client.query_points(
+                    collection_name=collection_name,
+                    query=vector_en,
+                    limit=5,
+                    with_payload=True
+                ).points
+                
+                for r in results_en:
+                    payload = r.payload or {}
+                    rid = payload.get("record_id", str(r.id))
+                    if rid not in all_results or r.score > all_results[rid]["score"]:
+                        all_results[rid] = {
+                            "content": payload.get("content", payload.get("text", "")),
+                            "score": r.score,
+                            "source": payload.get("source", "unknown"),
+                            "record_id": rid,
+                            "aircraft_model": payload.get("aircraft_model", ""),
+                            "manufacturer": payload.get("manufacturer", ""),
+                            "description": payload.get("description", ""),
+                            "problem": payload.get("problem", ""),
+                            "action": payload.get("action", "")
+                        }
+            
+            # 按分数排序，返回前5条
+            sorted_results = sorted(all_results.values(), key=lambda x: x["score"], reverse=True)
+            return sorted_results[:5]
             
         except Exception as e:
             logger.warning(f"⚠️ 知识检索失败: {e}")
@@ -364,9 +410,10 @@ class RepairDiagnosisEngine:
         1. 提取关键词
         2. 查询 Neo4j 知识图谱
         3. 查询 Qdrant 向量库
-        4. LLM 判断是否需要继续检索
-        5. 循环（最多2轮）
-        6. 最终诊断
+        4. 检查相关性阈值
+        5. LLM 判断是否需要继续检索
+        6. 循环（最多2轮）
+        7. 最终诊断
         
         Yields:
             ("step", "步骤描述")
@@ -418,6 +465,26 @@ class RepairDiagnosisEngine:
             yield ("rag", qdrant_results)
             all_evidence.extend(qdrant_results[:5])
             yield ("step", f"✅ 从向量库找到 {len(qdrant_results)} 条相关记录")
+        
+        # ========== 相关性检查 ==========
+        max_score = max([r.get("score", 0) for r in qdrant_results], default=0)
+        has_neo4j = len(neo4j_results) > 0
+        
+        # 如果向量库分数太低且知识图谱无结果，直接拒绝
+        if max_score < 0.3 and not has_neo4j and not image_analysis:
+            yield ("step", "⚠️ 未找到相关维修记录")
+            yield ("result", {
+                "success": False,
+                "error": "未找到相关维修记录",
+                "message": "当前知识库中没有与您描述匹配的维修记录。请尝试：\n1. 输入更详细的故障描述\n2. 包含设备型号、故障现象等关键信息\n3. 检查输入内容是否与维修领域相关",
+                "max_score": max_score,
+                "suggestion": "请输入详细的故障描述，例如：CESSNA 172 发动机在起飞后熄火"
+            })
+            return
+        
+        # 如果相关性较低，提示用户但仍继续
+        if max_score < 0.4:
+            yield ("step", f"⚠️ 检索结果相关性较低 ({max_score:.1%})，诊断结果仅供参考")
         
         # LLM 分析第一轮结果，判断是否需要继续
         yield ("step", "🧠 正在分析第一轮检索结果...")
@@ -567,17 +634,25 @@ class RepairDiagnosisEngine:
         if image_analysis:
             image_context = f"\n\n【照片分析】\n{image_analysis}\n"
         
-        return f"""你是一个专业的航空维修诊断专家。请根据以下信息进行综合分析。
+        return f"""你是一个专业的维修诊断专家。请根据以下信息进行综合分析。
 
 【故障描述】
 {description}
 {evidence_context}{image_context}
 
+⚠️ 重要原则：
+1. 只基于检索到的证据进行分析，不要编造信息
+2. 如果证据不足以支撑诊断，请明确告知"信息不足，无法给出可靠诊断"
+3. 不要猜测或虚构维修记录中不存在的信息
+4. 引用证据时请注明来源
+
 请按以下步骤分析：
-1. 识别故障类型和严重程度
-2. 分析可能的原因（基于检索到的证据）
-3. 评估对飞行安全的影响
+1. 识别故障类型和严重程度（基于证据）
+2. 分析可能的原因（引用检索到的记录）
+3. 评估影响
 4. 给出维修建议
+
+如果证据不足，请直接说明需要补充哪些信息。
 
 请用简洁的中文回答。"""
     
@@ -656,7 +731,7 @@ class RepairDiagnosisEngine:
                 image_context = f"\n\n【现场照片分析】\n{image_analysis}\n"
             
             # 构建诊断提示词
-            system_prompt = "你是一个专业的航空维修诊断专家。请根据用户描述的故障现象进行分析，给出诊断结果。只返回JSON格式。"
+            system_prompt = "你是一个专业的维修诊断专家。请根据用户描述的故障现象和检索到的证据进行分析。只返回JSON格式。重要：只基于提供的证据分析，不要编造信息。"
             
             user_prompt = f"""请根据以下故障描述进行分析，并给出诊断结果。
 
@@ -664,13 +739,19 @@ class RepairDiagnosisEngine:
 {description}
 {knowledge_context}{image_context}
 
+⚠️ 重要原则：
+1. 只基于提供的参考知识进行分析
+2. 如果参考知识为空或与故障无关，将 possible_causes 设为 ["信息不足，无法确定"]
+3. 不要编造或猜测不存在的维修记录
+
 请以JSON格式返回诊断结果，包含以下字段：
 {{
-    "fault_type": "故障类型（如：屏幕损坏、电源/电池问题、扬声器/音频、外部损坏、内部损坏、软件/固件、配置问题等）",
-    "possible_causes": ["可能原因1", "可能原因2", "可能原因3"],
+    "fault_type": "故障类型",
+    "possible_causes": ["可能原因1", "可能原因2"],
     "impact": "对使用的影响",
     "urgency": "紧急程度（低/中/高）",
-    "recommended_actions": ["建议操作1", "建议操作2"]
+    "recommended_actions": ["建议操作1", "建议操作2"],
+    "confidence": "置信度（高/中/低）"
 }}
 
 请只返回JSON格式，不要有其他内容。"""

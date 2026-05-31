@@ -1,5 +1,5 @@
 /**
- * 航空维修智能助手 - 前端逻辑
+ * 保障智能助手 - 前端逻辑
  * 使用 SSE (Server-Sent Events) 实现流式输出
  */
 
@@ -164,6 +164,18 @@ async function startDiagnosis() {
     const description = elements.faultDesc.value.trim();
     if (!description) {
         alert('请输入故障描述');
+        return;
+    }
+
+    // 输入校验：最少10个字符
+    if (description.length < 10) {
+        elements.cotArea.innerHTML = `
+            <div class="cot-step" style="color: #f59e0b;">⚠️ 输入内容过短</div>
+            <div class="cot-text">请详细描述故障现象，至少10个字符。</div>
+            <div class="cot-text" style="color: #64748b; margin-top: 8px;">
+                例如：CESSNA 172 发动机在起飞后熄火，滑油压力指示异常低
+            </div>
+        `;
         return;
     }
 
@@ -454,6 +466,16 @@ function handleResult(data) {
     if (data.success && data.work_order) {
         appendToCot('<div class="cot-step">✅ 诊断完成</div>');
         renderWorkOrder(data.work_order);
+    } else if (!data.success) {
+        // 显示错误信息和建议
+        let html = `<div class="cot-step" style="color: #f59e0b;">⚠️ ${escapeHtml(data.error || '无法完成诊断')}</div>`;
+        if (data.message) {
+            html += `<div class="cot-text">${escapeHtml(data.message).replace(/\n/g, '<br>')}</div>`;
+        }
+        if (data.suggestion) {
+            html += `<div class="cot-text" style="color: #3b82f6; margin-top: 12px;">💡 ${escapeHtml(data.suggestion)}</div>`;
+        }
+        appendToCot(html);
     }
 }
 
