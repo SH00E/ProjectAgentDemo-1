@@ -287,6 +287,46 @@ textarea {
     background: #94a3b8;
 }
 
+/* 证据链区域 */
+.evidence-section {
+    margin-top: 24px;
+}
+
+.evidence-section h2 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 12px;
+}
+
+.evidence-box {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    min-height: 200px;
+    max-height: 600px;
+    overflow-y: auto;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.evidence-box .placeholder {
+    color: #94a3b8;
+    font-style: italic;
+    display: block;
+    text-align: center;
+    padding: 40px 0;
+}
+
+.evidence-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1e40af;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #dbeafe;
+}
+
 /* CoT 步骤样式 */
 .cot-step {
     font-size: 16px;

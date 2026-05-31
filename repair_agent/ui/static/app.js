@@ -27,6 +27,7 @@ const elements = {
     removeImage: document.getElementById('remove-image'),
     btnDiagnose: document.getElementById('btn-diagnose'),
     cotArea: document.getElementById('cot-area'),
+    evidenceArea: document.getElementById('evidence-area'),
     orderArea: document.getElementById('order-area'),
 
     // 检索
@@ -49,9 +50,7 @@ const elements = {
     statDiagnosisCount: document.getElementById('stat-diagnosis-count'),
     statRunStatus: document.getElementById('stat-run-status'),
     statSessionId: document.getElementById('stat-session-id'),
-    componentsList: document.getElementById('components-list'),
-    statsRag: document.getElementById('stats-rag'),
-    statsMemory: document.getElementById('stats-memory')
+    componentsList: document.getElementById('components-list')
 };
 
 // ==================== 初始化 ====================
@@ -282,8 +281,11 @@ function handleSSEEvent(eventType, dataStr) {
 
 function handleRAG(data) {
     if (data.results && data.results.length > 0) {
-        let html = `<div class="cot-step-sub">📚 检索到 ${data.total} 条相关记录：</div>`;
-        html += '<div class="evidence-chain">';
+        // 在推理过程中显示简要信息
+        appendToCot(`<div class="cot-step-sub">📚 检索到 ${data.total} 条相关记录</div>`);
+        
+        // 在证据链区域显示详细信息
+        let html = '<div class="evidence-chain">';
         data.results.forEach((r, i) => {
             const sourceIcon = r.source === 'faa' ? '✈️' : r.source === 'maintnet' ? '🔧' : '📖';
             const scorePercent = (r.score * 100).toFixed(0);
@@ -292,23 +294,24 @@ function handleRAG(data) {
             html += `
                 <div class="evidence-item">
                     <div class="evidence-header">
+                        <span class="evidence-num">#${i + 1}</span>
                         <span class="evidence-source">${sourceIcon} ${escapeHtml(r.source_label)}</span>
                         <span class="evidence-score ${scoreClass}">${scorePercent}%</span>
                     </div>
                     <div class="evidence-content">${escapeHtml(r.content)}</div>
-                    ${r.aircraft_model ? `<div class="evidence-meta">🛩️ 飞机型号: ${escapeHtml(r.aircraft_model)}</div>` : ''}
-                    ${r.manufacturer ? `<div class="evidence-meta">🏭 制造商: ${escapeHtml(r.manufacturer)}</div>` : ''}
-                    ${r.description ? `<div class="evidence-meta">📝 描述: ${escapeHtml(r.description)}</div>` : ''}
-                    ${r.problem ? `<div class="evidence-meta">⚠️ 问题: ${escapeHtml(r.problem)}</div>` : ''}
-                    ${r.action ? `<div class="evidence-meta">🔧 操作: ${escapeHtml(r.action)}</div>` : ''}
-                    ${r.record_id ? `<div class="evidence-meta">🆔 记录ID: ${escapeHtml(r.record_id)}</div>` : ''}
+                    <div class="evidence-details">
+                        ${r.aircraft_model ? `<span class="evidence-tag">🛩️ ${escapeHtml(r.aircraft_model)}</span>` : ''}
+                        ${r.manufacturer ? `<span class="evidence-tag">🏭 ${escapeHtml(r.manufacturer)}</span>` : ''}
+                        ${r.record_id ? `<span class="evidence-tag">🆔 ${escapeHtml(r.record_id)}</span>` : ''}
+                    </div>
                 </div>
             `;
         });
         html += '</div>';
-        appendToCot(html);
+        elements.evidenceArea.innerHTML = html;
     } else {
         appendToCot('<div class="cot-step-sub">📚 知识库暂无匹配记录</div>');
+        elements.evidenceArea.innerHTML = '<em class="placeholder">未找到相关证据</em>';
     }
 }
 
@@ -360,16 +363,18 @@ function handleDiagnosis(data) {
         html += `<div class="cot-text">可能原因: ${data.possible_causes.map(c => escapeHtml(c)).join('、')}</div>`;
     }
 
-    // 显示证据链
+    appendToCot(html);
+
+    // 在证据链区域显示诊断依据
     if (data.evidence_chain && data.evidence_chain.length > 0) {
-        html += '<div class="cot-step-sub" style="margin-top: 16px;">📎 诊断依据（证据链）：</div>';
-        html += '<div class="evidence-chain">';
+        let evidenceHtml = '<div class="evidence-chain">';
+        evidenceHtml += '<div class="evidence-title">📋 诊断依据（证据链）</div>';
         data.evidence_chain.forEach((ev, i) => {
             const sourceIcon = ev.source === 'faa' ? '✈️' : ev.source === 'maintnet' ? '🔧' : '📖';
             const scorePercent = (ev.score * 100).toFixed(0);
             const scoreClass = ev.score >= 0.6 ? 'score-high' : ev.score >= 0.4 ? 'score-medium' : 'score-low';
             
-            html += `
+            evidenceHtml += `
                 <div class="evidence-item">
                     <div class="evidence-header">
                         <span class="evidence-num">#${i + 1}</span>
@@ -385,10 +390,9 @@ function handleDiagnosis(data) {
                 </div>
             `;
         });
-        html += '</div>';
+        evidenceHtml += '</div>';
+        elements.evidenceArea.innerHTML = evidenceHtml;
     }
-
-    appendToCot(html);
 }
 
 function handleSolution(data) {
@@ -774,14 +778,6 @@ async function refreshStats() {
                 `;
             });
             elements.componentsList.innerHTML = compHtml;
-
-            // 详细信息 - 格式化显示
-            const ragText = kbStats.summary || kbStats.description || JSON.stringify(kbStats, null, 2);
-            const memText = memStats.summary || memStats.description || JSON.stringify(memStats, null, 2);
-            
-            // 将换行符转换为HTML换行，并处理Markdown粗体
-            elements.statsRag.innerHTML = formatStatsText(ragText);
-            elements.statsMemory.innerHTML = formatStatsText(memText);
         } else {
             console.error('获取统计失败:', data.error);
         }
