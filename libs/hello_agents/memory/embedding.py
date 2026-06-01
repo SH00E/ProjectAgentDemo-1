@@ -12,10 +12,30 @@
 - EMBED_BASE_URL: Embedding Base URL（统一命名，可选）
 """
 
+from contextlib import contextmanager
 from typing import List, Union, Optional
 import threading
 import os
 import numpy as np
+
+
+@contextmanager
+def no_proxy_env():
+    proxy_keys = (
+        "ALL_PROXY",
+        "all_proxy",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "http_proxy",
+        "https_proxy",
+    )
+    old_values = {key: os.environ.pop(key, None) for key in proxy_keys}
+    try:
+        yield
+    finally:
+        for key, value in old_values.items():
+            if value is not None:
+                os.environ[key] = value
 
 
 # ==============
@@ -51,21 +71,24 @@ class LocalTransformerEmbedding(EmbeddingModel):
             import torch
             from sentence_transformers import SentenceTransformer
             device = "cuda" if torch.cuda.is_available() else "cpu"
-            self._st_model = SentenceTransformer(self.model_name, device=device)
+            with no_proxy_env():
+                self._st_model = SentenceTransformer(self.model_name, device=device)
             test_vec = self._st_model.encode("test_text")
             self._dimension = len(test_vec)
             self._backend = "st"
             print(f"✅ SentenceTransformer loaded on {device.upper()}")
             return
-        except Exception:
+        except Exception as e:
+            print(f"⚠️ SentenceTransformer 本地嵌入加载失败: {e}")
             self._st_model = None
 
         # 回退 transformers
         try:
             from transformers import AutoTokenizer, AutoModel
             import torch
-            self._hf_tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            self._hf_model = AutoModel.from_pretrained(self.model_name)
+            with no_proxy_env():
+                self._hf_tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+                self._hf_model = AutoModel.from_pretrained(self.model_name)
             with torch.no_grad():
                 inputs = self._hf_tokenizer("test_text", return_tensors="pt", padding=True, truncation=True)
                 outputs = self._hf_model(**inputs)
@@ -73,7 +96,8 @@ class LocalTransformerEmbedding(EmbeddingModel):
                 self._dimension = int(test_embedding.shape[1])
             self._backend = "hf"
             return
-        except Exception:
+        except Exception as e:
+            print(f"⚠️ Transformers 本地嵌入加载失败: {e}")
             self._hf_tokenizer = None
             self._hf_model = None
 
@@ -258,7 +282,8 @@ def create_embedding_model_with_fallback(preferred_type: str = "dashscope", **kw
     for t in fallback:
         try:
             return create_embedding_model(t, **kwargs)
-        except Exception:
+        except Exception as e:
+            print(f"⚠️ 嵌入模型 {t} 初始化失败: {e}")
             continue
     raise RuntimeError("所有嵌入模型都不可用，请安装依赖或检查配置")
 

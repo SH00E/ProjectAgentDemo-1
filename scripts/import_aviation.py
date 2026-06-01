@@ -419,7 +419,10 @@ def main():
     # 初始化
     model = init_embedding()
     
-    qdrant = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
+    qdrant = QdrantClient(
+        url=os.getenv("QDRANT_URL", "http://localhost:6333"),
+        trust_env=False,
+    )
     init_qdrant(qdrant)
     
     neo4j_driver = GraphDatabase.driver(
