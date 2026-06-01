@@ -76,10 +76,10 @@ class LocalTransformerEmbedding(EmbeddingModel):
             test_vec = self._st_model.encode("test_text")
             self._dimension = len(test_vec)
             self._backend = "st"
-            print(f"✅ SentenceTransformer loaded on {device.upper()}")
+            print(f"[OK] SentenceTransformer loaded on {device.upper()}")
             return
         except Exception as e:
-            print(f"⚠️ SentenceTransformer 本地嵌入加载失败: {e}")
+            print(f"[WARN] SentenceTransformer local embedding failed: {e}")
             self._st_model = None
 
         # 回退 transformers
@@ -97,7 +97,7 @@ class LocalTransformerEmbedding(EmbeddingModel):
             self._backend = "hf"
             return
         except Exception as e:
-            print(f"⚠️ Transformers 本地嵌入加载失败: {e}")
+            print(f"[WARN] Transformers local embedding failed: {e}")
             self._hf_tokenizer = None
             self._hf_model = None
 
@@ -283,7 +283,7 @@ def create_embedding_model_with_fallback(preferred_type: str = "dashscope", **kw
         try:
             return create_embedding_model(t, **kwargs)
         except Exception as e:
-            print(f"⚠️ 嵌入模型 {t} 初始化失败: {e}")
+            print(f"[WARN] Embedding model {t} init failed: {e}")
             continue
     raise RuntimeError("所有嵌入模型都不可用，请安装依赖或检查配置")
 
