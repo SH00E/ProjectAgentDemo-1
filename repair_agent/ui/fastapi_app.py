@@ -513,9 +513,9 @@ async def add_case(request: Request):
             from hello_agents.memory.embedding import get_text_embedder
             
             client = QdrantClient(
-            url=os.getenv("QDRANT_URL", "http://localhost:6333"),
-            trust_env=False,
-        )
+                url=os.getenv("QDRANT_URL", "http://localhost:6333"),
+                trust_env=False,
+            )
             embedder = get_text_embedder()
             
             # 构建可检索的文本
