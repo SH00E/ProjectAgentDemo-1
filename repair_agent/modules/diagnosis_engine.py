@@ -112,7 +112,9 @@ class RepairDiagnosisEngine:
             from qdrant_client import QdrantClient
             from hello_agents.memory.embedding import get_text_embedder
             
-            client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
+            qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
+            is_local = "localhost" in qdrant_url or "127.0.0.1" in qdrant_url
+            client = QdrantClient(url=qdrant_url, trust_env=not is_local)
             embedder = get_text_embedder()
             
             collections = [c.name for c in client.get_collections().collections]

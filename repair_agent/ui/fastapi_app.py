@@ -358,7 +358,9 @@ async def search_knowledge(request: Request):
         from qdrant_client import QdrantClient
         from hello_agents.memory.embedding import get_text_embedder
         
-        client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
+        qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
+        is_local = "localhost" in qdrant_url or "127.0.0.1" in qdrant_url
+        client = QdrantClient(url=qdrant_url, trust_env=not is_local)
         embedder = get_text_embedder()
         
         collections = [c.name for c in client.get_collections().collections]
@@ -509,7 +511,9 @@ async def add_case(request: Request):
             from qdrant_client.models import PointStruct
             from hello_agents.memory.embedding import get_text_embedder
             
-            client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
+            qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
+            is_local = "localhost" in qdrant_url or "127.0.0.1" in qdrant_url
+            client = QdrantClient(url=qdrant_url, trust_env=not is_local)
             embedder = get_text_embedder()
             
             # 构建可检索的文本
@@ -712,7 +716,9 @@ async def get_vector_space():
         from sklearn.manifold import TSNE
         from qdrant_client import QdrantClient
         
-        client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
+        qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
+        is_local = "localhost" in qdrant_url or "127.0.0.1" in qdrant_url
+        client = QdrantClient(url=qdrant_url, trust_env=not is_local)
         
         # 优先使用航空数据集合，如果不存在则使用旧集合
         collection_name = "aviation_knowledge_base"

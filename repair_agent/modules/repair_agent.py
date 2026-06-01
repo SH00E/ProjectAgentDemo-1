@@ -69,7 +69,9 @@ class RepairAgent:
         
         # 检查航空数据集合是否存在
         from qdrant_client import QdrantClient
-        qdrant = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
+        qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
+        is_local = "localhost" in qdrant_url or "127.0.0.1" in qdrant_url
+        qdrant = QdrantClient(url=qdrant_url, trust_env=not is_local)
         collections = [c.name for c in qdrant.get_collections().collections]
         collection_name = "aviation_knowledge_base" if "aviation_knowledge_base" in collections else "rag_knowledge_base"
         
