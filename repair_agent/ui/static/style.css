@@ -53,6 +53,38 @@ h2 {
     color: #64748b;
 }
 
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.btn-demo {
+    padding: 8px 16px;
+    background: linear-gradient(135deg, #f59e0b, #f97316);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-demo:hover {
+    background: linear-gradient(135deg, #d97706, #ea580c);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+.btn-demo.running {
+    background: linear-gradient(135deg, #94a3b8, #64748b);
+    cursor: not-allowed;
+}
+
 .status-bar {
     padding: 8px 16px;
     border-radius: 8px;
@@ -2424,6 +2456,35 @@ textarea {
 
     .stats-detail-grid {
         grid-template-columns: 1fr;
+    }
+}
+
+/* ==================== 演示通知 ==================== */
+
+.demo-notification {
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #1e293b, #334155);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 1000;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
     }
 }
 
