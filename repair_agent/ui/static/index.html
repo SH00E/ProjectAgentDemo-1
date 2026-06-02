@@ -224,18 +224,18 @@
                         <div class="template-buttons">
                             <button class="btn-template" data-template="aircraft">✈️ 飞机维修</button>
                             <button class="btn-template" data-template="engine">🔧 发动机故障</button>
-                            <button class="btn-template" data-template="landing">🛬 起落架问题</button>
+                            <button class="btn-template" data-template="missile">🚀 导弹故障</button>
                             <button class="btn-template" data-template="custom">✏️ 自定义</button>
                         </div>
                     </div>
 
                     <div class="form-group">
                         <label for="repair-title">案例标题 *</label>
-                        <input type="text" id="repair-title" placeholder="例如：CESSNA 172 发动机熄火维修" />
+                        <input type="text" id="repair-title" placeholder="例如：某型导弹制导系统信号丢失维修" />
                     </div>
                     <div class="form-group">
                         <label for="repair-device-type">设备类型</label>
-                        <input type="text" id="repair-device-type" placeholder="例如：CESSNA 172、BOEING 737" />
+                        <input type="text" id="repair-device-type" placeholder="例如：某型战机、某型导弹" />
                     </div>
                     <div class="form-group">
                         <label for="repair-fault-symptom">故障现象</label>
@@ -273,31 +273,23 @@
                         <h3>📋 快速模板</h3>
                         <div class="template-buttons">
                             <button class="btn-template" data-template="oil-change">🛢️ 更换滑油</button>
-                            <button class="btn-template" data-template="brake-change">🔄 更换刹车</button>
-                            <button class="btn-template" data-template="inspection">🔍 定期检查</button>
+                            <button class="btn-template" data-template="radar-check">📡 雷达维护</button>
+                            <button class="btn-template" data-template="missile-maint">🚀 导弹维护</button>
                             <button class="btn-template" data-template="custom-maint">✏️ 自定义</button>
                         </div>
                     </div>
 
                     <div class="form-group">
                         <label for="maint-title">案例标题 *</label>
-                        <input type="text" id="maint-title" placeholder="例如：发动机滑油更换" />
+                        <input type="text" id="maint-title" placeholder="例如：战机发动机滑油更换" />
                     </div>
                     <div class="form-group">
                         <label for="maint-device-type">设备类型</label>
-                        <input type="text" id="maint-device-type" placeholder="例如：CESSNA 172、BOEING 737" />
+                        <input type="text" id="maint-device-type" placeholder="例如：某型战机、某型导弹" />
                     </div>
                     <div class="form-group">
                         <label for="maint-type">维护类型</label>
-                        <select id="maint-type">
-                            <option value="">请选择维护类型</option>
-                            <option value="定期检查">定期检查</option>
-                            <option value="更换">更换</option>
-                            <option value="润滑">润滑</option>
-                            <option value="校准">校准</option>
-                            <option value="清洁">清洁</option>
-                            <option value="其他">其他</option>
-                        </select>
+                        <input type="text" id="maint-type" placeholder="例如：定期检查、更换、润滑、校准" />
                     </div>
                     <div class="form-group">
                         <label for="maint-cycle">维护周期</label>

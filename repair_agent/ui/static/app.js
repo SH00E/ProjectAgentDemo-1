@@ -867,34 +867,34 @@ function toggleCaseForm(caseType) {
 function applyRepairTemplate(type) {
     const templates = {
         aircraft: {
-            title: '飞机维修案例',
-            device_type: 'CESSNA 172',
-            fault_symptom: '发动机运行不稳定，出现间歇性熄火',
-            fault_cause: '燃油滤清器堵塞，导致供油不足',
-            solution: '1. 检查燃油系统\n2. 更换燃油滤清器\n3. 测试发动机运行',
-            parts_used: '燃油滤清器',
+            title: '战机发动机推力下降维修',
+            device_type: '某型战机',
+            fault_symptom: '发动机在高空出现推力下降，尾喷口温度异常升高',
+            fault_cause: '涡轮叶片疲劳裂纹，导致燃气泄漏',
+            solution: '1. 拆卸发动机\n2. 检查涡轮叶片\n3. 更换受损叶片\n4. 重新组装测试',
+            parts_used: '涡轮叶片组件、密封件',
             technician: '',
             notes: ''
         },
         engine: {
-            title: '发动机故障案例',
-            device_type: 'CONTINENTAL IO-360',
-            fault_symptom: '发动机功率下降，排气管冒黑烟',
-            fault_cause: '火花塞积碳严重，点火不良',
-            solution: '1. 拆卸火花塞\n2. 清洁或更换火花塞\n3. 检查点火系统\n4. 测试运行',
-            parts_used: '火花塞',
+            title: '发动机启动故障',
+            device_type: '某型战机',
+            fault_symptom: '发动机启动困难，点火后转速上升缓慢',
+            fault_cause: '燃油泵压力不足，喷油嘴堵塞',
+            solution: '1. 检查燃油泵\n2. 清洁或更换喷油嘴\n3. 测试燃油压力\n4. 重新启动测试',
+            parts_used: '喷油嘴、燃油滤清器',
             technician: '',
             notes: ''
         },
-        landing: {
-            title: '起落架问题案例',
-            device_type: 'BOEING 737',
-            fault_symptom: '起落架收放异常，指示灯不亮',
-            fault_cause: '液压系统泄漏，压力不足',
-            solution: '1. 检查液压系统\n2. 修复泄漏点\n3. 补充液压油\n4. 测试起落架收放',
-            parts_used: '液压油管、密封圈',
+        missile: {
+            title: '导弹制导系统故障',
+            device_type: '某型导弹',
+            fault_symptom: '制导系统在测试中出现信号丢失，无法锁定目标',
+            fault_cause: '惯性导航单元漂移超标，陀螺仪性能下降',
+            solution: '1. 检测惯性导航单元\n2. 校准陀螺仪\n3. 更换故障组件\n4. 系统联调测试',
+            parts_used: '陀螺仪组件、连接电缆',
             technician: '',
-            notes: ''
+            notes: '需要在洁净环境下操作'
         },
         custom: {
             title: '',
@@ -924,37 +924,37 @@ function applyRepairTemplate(type) {
 function applyMaintenanceTemplate(type) {
     const templates = {
         'oil-change': {
-            title: '发动机滑油更换',
-            device_type: 'CESSNA 172',
+            title: '战机发动机滑油更换',
+            device_type: '某型战机',
             maintenance_type: '更换',
             maintenance_cycle: '每500飞行小时或6个月',
-            maintenance_standard: 'CESSNA 172 维护手册 Chapter 12',
+            maintenance_standard: '发动机维护手册 Chapter 12',
             solution: '1. 发动机运行至正常工作温度\n2. 关闭发动机，拆卸放油螺塞\n3. 排放旧滑油\n4. 更换滑油滤清器\n5. 安装放油螺塞\n6. 加注新滑油至规定液位\n7. 启动发动机检查是否泄漏',
-            parts_used: '滑油滤清器、航空滑油(10W-40)、放油螺塞垫片',
+            parts_used: '滑油滤清器、航空滑油、放油螺塞垫片',
             technician: '',
             notes: ''
         },
-        'brake-change': {
-            title: '刹车片更换',
-            device_type: 'BOEING 737',
-            maintenance_type: '更换',
-            maintenance_cycle: '每300次起落或根据磨损指示',
-            maintenance_standard: 'AMM 32-40-00',
-            solution: '1. 使用千斤顶顶起飞机\n2. 拆卸机轮\n3. 拆卸旧刹车片\n4. 检查刹车盘磨损情况\n5. 安装新刹车片\n6. 安装机轮\n7. 测试刹车功能',
-            parts_used: '刹车片组件、刹车盘（如需要）',
-            technician: '',
-            notes: ''
-        },
-        inspection: {
-            title: '定期检查',
-            device_type: '',
+        'radar-check': {
+            title: '雷达系统定期维护',
+            device_type: '某型战机',
             maintenance_type: '定期检查',
             maintenance_cycle: '每100飞行小时',
-            maintenance_standard: '适航指令 AD 相关要求',
-            solution: '1. 外部检查机体结构\n2. 飞行控制系统检查\n3. 发动机检查\n4. 液压系统检查\n5. 电气系统检查\n6. 起落架检查\n7. 记录检查结果',
+            maintenance_standard: '雷达维护手册',
+            solution: '1. 检查雷达天线外观\n2. 测试雷达发射功率\n3. 检查接收灵敏度\n4. 校准雷达波束\n5. 检查冷却系统\n6. 记录测试数据',
             parts_used: '',
             technician: '',
-            notes: ''
+            notes: '维护时需断开雷达电源'
+        },
+        'missile-maint': {
+            title: '导弹发射系统维护',
+            device_type: '某型导弹',
+            maintenance_type: '定期检查',
+            maintenance_cycle: '每季度或发射前',
+            maintenance_standard: '导弹维护规程',
+            solution: '1. 检查发射导轨状态\n2. 测试电气连接\n3. 检查液压/气动系统\n4. 测试发射控制信号\n5. 检查安全锁定装置\n6. 记录维护结果',
+            parts_used: '密封圈、润滑脂',
+            technician: '',
+            notes: '严格遵守安全操作规程'
         },
         'custom-maint': {
             title: '',
