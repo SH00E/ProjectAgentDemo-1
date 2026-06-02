@@ -490,7 +490,8 @@ function handleDiagnosis(data) {
                 content: ev.content,
                 description: ev.description,
                 problem: ev.problem,
-                action: ev.action
+                action: ev.action,
+                case_type: ev.case_type || ''
             };
             window._diagnosisEvidenceData.push(evidenceData);
             const dataIndex = window._diagnosisEvidenceData.length - 1;

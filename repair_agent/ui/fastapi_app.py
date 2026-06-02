@@ -327,6 +327,7 @@ def diagnosis_stream(description: str, image_path: str = None, mode: str = "repa
                     "description": ref.get("description", "")[:150],
                     "problem": ref.get("problem", "")[:150],
                     "action": ref.get("action", "")[:150],
+                    "case_type": ref.get("case_type", ""),
                     "neo4j_type": details.get("type", ""),
                     "incident_types": incident_types[:3]
                 })
