@@ -727,7 +727,8 @@ async function searchKnowledge(page = 1) {
                     content: content,
                     description: r.description,
                     problem: r.problem,
-                    action: r.action
+                    action: r.action,
+                    case_type: r.case_type || ''
                 });
 
                 html += `
@@ -3126,21 +3127,23 @@ function showEvidenceDetail(data) {
         `;
     }
     
-    // 故障现象
+    // 故障现象 / 维护类型
     if (data.description) {
+        const descLabel = data.case_type === 'maintenance' ? '维护类型' : '故障现象';
         html += `
             <div class="detail-section">
-                <div class="detail-label">故障现象 / 维护类型</div>
+                <div class="detail-label">${descLabel}</div>
                 <div class="detail-value">${escapeHtml(data.description)}</div>
             </div>
         `;
     }
     
-    // 故障原因 / 维护操作
+    // 故障原因 / 维护周期
     if (data.problem) {
+        const problemLabel = data.case_type === 'maintenance' ? '维护周期' : '故障原因';
         html += `
             <div class="detail-section">
-                <div class="detail-label">故障原因 / 维护操作</div>
+                <div class="detail-label">${problemLabel}</div>
                 <div class="detail-value">${escapeHtml(data.problem)}</div>
             </div>
         `;
