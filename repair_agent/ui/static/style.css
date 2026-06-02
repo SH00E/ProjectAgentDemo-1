@@ -57,20 +57,36 @@ h2 {
     color: #1e293b;
 }
 
+/* ==================== Logo 横幅 ==================== */
+
+.logo-banner {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px 0 12px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.logo-banner-img {
+    width: 72px;
+    height: 72px;
+    object-fit: contain;
+}
+
 /* ==================== 头部 ==================== */
 
 .header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px 0;
+    padding: 12px 0;
     border-bottom: 1px solid #e2e8f0;
     background: white;
     position: sticky;
     top: 0;
     z-index: 100;
     margin: 0 -20px;
-    padding: 16px 20px;
+    padding: 12px 20px;
 }
 
 .header-content h1 {
@@ -81,12 +97,6 @@ h2 {
     display: flex;
     align-items: center;
     gap: 16px;
-}
-
-.header-logo {
-    width: 56px;
-    height: 56px;
-    object-fit: contain;
 }
 
 .header-text {
