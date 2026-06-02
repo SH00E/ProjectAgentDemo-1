@@ -114,6 +114,28 @@ h2 {
     cursor: not-allowed;
 }
 
+.btn-dashboard {
+    padding: 8px 16px;
+    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-dashboard:hover {
+    background: linear-gradient(135deg, #2563eb, #4f46e5);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
 .status-bar {
     padding: 8px 16px;
     border-radius: 8px;

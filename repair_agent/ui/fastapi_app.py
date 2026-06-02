@@ -370,6 +370,13 @@ async def index(request: Request):
     with open(html_path, "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read())
 
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    """返回数据大屏页面"""
+    html_path = os.path.join(static_dir, "dashboard.html")
+    with open(html_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
 @app.get("/api/status")
 async def get_status():
     """获取系统状态"""

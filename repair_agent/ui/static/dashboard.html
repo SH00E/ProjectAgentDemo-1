@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>保障智能助手 - 数据大屏</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: white;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-rows: auto 1fr 1fr;
+            gap: 20px;
+            padding: 20px;
+            height: 100vh;
+        }
+
+        .header {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(90deg, #60a5fa, #34d399);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-time {
+            font-size: 16px;
+            color: #94a3b8;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #94a3b8;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card-title::before {
+            content: '';
+            width: 4px;
+            height: 16px;
+            background: linear-gradient(180deg, #3b82f6, #10b981);
+            border-radius: 2px;
+        }
+
+        .stat-cards {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(16, 185, 129, 0.2));
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-card .icon {
+            font-size: 36px;
+            margin-bottom: 12px;
+        }
+
+        .stat-card .number {
+            font-size: 42px;
+            font-weight: 700;
+            background: linear-gradient(90deg, #60a5fa, #34d399);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stat-card .label {
+            font-size: 14px;
+            color: #94a3b8;
+            margin-top: 8px;
+        }
+
+        .chart-container {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+        }
+
+        .bar-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .bar-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .bar-label {
+            width: 100px;
+            text-align: right;
+            font-size: 13px;
+            color: #e2e8f0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .bar-wrapper {
+            flex: 1;
+            height: 28px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #60a5fa);
+            border-radius: 6px;
+            transition: width 1s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .bar-fill.green {
+            background: linear-gradient(90deg, #10b981, #34d399);
+        }
+
+        .bar-fill.yellow {
+            background: linear-gradient(90deg, #f59e0b, #fbbf24);
+        }
+
+        .recent-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .recent-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+        }
+
+        .recent-type {
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .recent-type.repair {
+            background: rgba(59, 130, 246, 0.3);
+            color: #93c5fd;
+        }
+
+        .recent-type.maintenance {
+            background: rgba(16, 185, 129, 0.3);
+            color: #6ee7b7;
+        }
+
+        .recent-title {
+            flex: 1;
+            font-size: 14px;
+            color: #e2e8f0;
+        }
+
+        .recent-time {
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        .back-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            z-index: 100;
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #64748b;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <button class="back-btn" onclick="window.location.href='/'">← 返回主界面</button>
+
+    <div class="dashboard">
+        <div class="header">
+            <h1>🛡️ 装备保障智能助手 - 数据大屏</h1>
+            <div class="header-time" id="current-time"></div>
+        </div>
+
+        <div class="stat-cards">
+            <div class="stat-card">
+                <div class="icon">📊</div>
+                <div class="number" id="total-cases">--</div>
+                <div class="label">案例总数</div>
+            </div>
+            <div class="stat-card">
+                <div class="icon">🔧</div>
+                <div class="number" id="repair-cases">--</div>
+                <div class="label">维修案例</div>
+            </div>
+            <div class="stat-card">
+                <div class="icon">🛠️</div>
+                <div class="number" id="maintenance-cases">--</div>
+                <div class="label">维护案例</div>
+            </div>
+            <div class="stat-card">
+                <div class="icon">📮</div>
+                <div class="number" id="feedback-count">--</div>
+                <div class="label">用户反馈</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">🛩️ 设备类型分布</div>
+            <div class="chart-container" id="device-chart">
+                <div class="loading">加载中...</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">⚠️ 故障类型分布</div>
+            <div class="chart-container" id="fault-chart">
+                <div class="loading">加载中...</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">🔧 维护类型分布</div>
+            <div class="chart-container" id="maintenance-chart">
+                <div class="loading">加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 更新时间
+        function updateTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            document.getElementById('current-time').textContent = timeStr;
+        }
+        updateTime();
+        setInterval(updateTime, 1000);
+
+        // 加载数据
+        async function loadData() {
+            try {
+                const response = await fetch('/api/data-stats');
+                const data = await response.json();
+
+                if (data.success) {
+                    const stats = data.data;
+
+                    // 更新数字
+                    document.getElementById('total-cases').textContent = stats.summary.total_cases;
+                    document.getElementById('repair-cases').textContent = stats.summary.repair_cases;
+                    document.getElementById('maintenance-cases').textContent = stats.summary.maintenance_cases;
+                    document.getElementById('feedback-count').textContent = stats.summary.feedback_count;
+
+                    // 渲染图表
+                    renderBarChart('device-chart', stats.device_distribution, 'blue');
+                    renderBarChart('fault-chart', stats.fault_distribution, 'yellow');
+                    renderBarChart('maintenance-chart', stats.maintenance_distribution, 'green');
+                }
+            } catch (e) {
+                console.error('加载数据失败:', e);
+            }
+        }
+
+        function renderBarChart(containerId, data, colorType) {
+            const container = document.getElementById(containerId);
+            if (!container || !data || data.length === 0) {
+                container.innerHTML = '<div class="loading">暂无数据</div>';
+                return;
+            }
+
+            const maxCount = Math.max(...data.map(d => d.count));
+            let html = '<div class="bar-chart">';
+
+            data.forEach(item => {
+                const width = maxCount > 0 ? (item.count / maxCount * 100) : 0;
+                const fillClass = colorType === 'green' ? 'green' : colorType === 'yellow' ? 'yellow' : '';
+                
+                html += `
+                    <div class="bar-item">
+                        <span class="bar-label" title="${item.name}">${item.name}</span>
+                        <div class="bar-wrapper">
+                            <div class="bar-fill ${fillClass}" style="width: ${width}%">${item.count}</div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        // 初始加载
+        loadData();
+
+        // 每30秒刷新一次
+        setInterval(loadData, 30000);
+    </script>
+</body>
+</html>
