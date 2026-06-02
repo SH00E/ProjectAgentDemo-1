@@ -449,12 +449,15 @@ async def diagnose(
 
 @app.post("/api/search")
 async def search_knowledge(request: Request):
-    """知识检索 - 混合搜索（关键词 + 向量）"""
+    """知识检索 - 混合搜索（关键词 + 向量）- 支持分页"""
     if agent_state["agent"] is None:
         return JSONResponse(status_code=503, content={"error": "系统未就绪"})
 
     body = await request.json()
     query = body.get("query", "").strip()
+    page = body.get("page", 1)
+    page_size = body.get("page_size", 20)
+    
     if not query:
         return JSONResponse(status_code=400, content={"error": "请输入查询内容"})
 
@@ -495,7 +498,7 @@ async def search_knowledge(request: Request):
             keyword_scroll = client.scroll(
                 collection_name=collection_name,
                 scroll_filter=keyword_filter,
-                limit=10,
+                limit=50,
                 with_payload=True
             )
             
@@ -578,7 +581,7 @@ async def search_knowledge(request: Request):
             results_cn = client.query_points(
                 collection_name=collection_name,
                 query=vector_cn,
-                limit=10,
+                limit=50,
                 with_payload=True
             ).points
             
@@ -614,7 +617,7 @@ async def search_knowledge(request: Request):
                 results_en = client.query_points(
                     collection_name=collection_name,
                     query=vector_en,
-                    limit=5,
+                    limit=50,
                     with_payload=True
                 ).points
                 
@@ -642,11 +645,18 @@ async def search_knowledge(request: Request):
         all_results = {**keyword_results, **vector_results}
         
         # 按分数排序（关键词结果分数高，会排在前面）
-        sorted_results = sorted(all_results.values(), key=lambda x: x["score"], reverse=True)[:10]
+        sorted_results = sorted(all_results.values(), key=lambda x: x["score"], reverse=True)
+        
+        # 计算分页
+        total = len(sorted_results)
+        total_pages = (total + page_size - 1) // page_size
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paged_results = sorted_results[start_idx:end_idx]
         
         # 格式化结果
         enhanced_results = []
-        for r in sorted_results:
+        for r in paged_results:
             source = r.get("source", "unknown")
             source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "用户案例" if source == "user_case" else "知识库"
             
@@ -678,7 +688,15 @@ async def search_knowledge(request: Request):
                 "keywords": query.split()
             })
         
-        return {"success": True, "results": enhanced_results, "query": query}
+        return {
+            "success": True, 
+            "results": enhanced_results, 
+            "query": query,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages
+        }
     except Exception as e:
         logger.error(f"搜索失败: {e}")
         return JSONResponse(status_code=500, content={"error": f"检索失败: {e}"})

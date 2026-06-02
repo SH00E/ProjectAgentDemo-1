@@ -767,6 +767,54 @@ textarea {
     gap: 20px;
 }
 
+/* 搜索统计 */
+.search-stats {
+    padding: 10px 15px;
+    background: #f1f5f9;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #64748b;
+    margin-bottom: 15px;
+}
+
+/* 搜索分页 */
+.search-pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.search-pagination .pagination-btn {
+    padding: 6px 12px;
+    border: 1px solid #e2e8f0;
+    background: white;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.search-pagination .pagination-btn:hover:not(:disabled) {
+    border-color: #3b82f6;
+    color: #1e40af;
+}
+
+.search-pagination .pagination-btn.active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: white;
+}
+
+.search-pagination .pagination-info {
+    font-size: 13px;
+    color: #64748b;
+    margin: 0 4px;
+}
+
 .hot-search,
 .search-history {
     background: white;

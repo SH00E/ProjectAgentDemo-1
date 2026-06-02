@@ -184,18 +184,6 @@ async function startDiagnosis() {
         return;
     }
 
-    // 输入校验：最少10个字符
-    if (description.length < 10) {
-        elements.cotArea.innerHTML = `
-            <div class="cot-step" style="color: #f59e0b;">⚠️ 输入内容过短</div>
-            <div class="cot-text">请详细描述故障现象，至少10个字符。</div>
-            <div class="cot-text" style="color: #64748b; margin-top: 8px;">
-                例如：CESSNA 172 发动机在起飞后熄火，滑油压力指示异常低
-            </div>
-        `;
-        return;
-    }
-
     state.isDiagnosing = true;
     state.analysisText = '';
     state.solutionText = '';
@@ -566,31 +554,61 @@ function initSearch() {
     });
 }
 
-async function searchKnowledge() {
+// 搜索状态
+const searchState = {
+    currentQuery: '',
+    currentPage: 1,
+    pageSize: 20,
+    totalPages: 1,
+    total: 0
+};
+
+async function searchKnowledge(page = 1) {
     const query = elements.searchQuery.value.trim();
     if (!query) {
         alert('请输入查询内容');
         return;
     }
 
+    // 更新搜索状态
+    searchState.currentQuery = query;
+    searchState.currentPage = page;
+
     elements.btnSearch.disabled = true;
     elements.btnSearch.textContent = '🔍 检索中...';
-    elements.searchResults.innerHTML = '<div class="loading-placeholder"><span class="loading-icon">⏳</span><p>正在检索...</p></div>';
+    if (page === 1) {
+        elements.searchResults.innerHTML = '<div class="loading-placeholder"><span class="loading-icon">⏳</span><p>正在检索...</p></div>';
+    }
 
     // 添加到搜索历史
-    addToSearchHistory(query);
+    if (page === 1) {
+        addToSearchHistory(query);
+    }
 
     try {
         const response = await fetch('/api/search', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query })
+            body: JSON.stringify({ 
+                query: query, 
+                page: page, 
+                page_size: searchState.pageSize 
+            })
         });
 
         const data = await response.json();
 
         if (data.success && data.results && data.results.length > 0) {
+            // 更新分页状态
+            searchState.total = data.total || 0;
+            searchState.totalPages = data.total_pages || 1;
+            searchState.currentPage = data.page || 1;
+
             let html = '';
+            
+            // 显示结果统计
+            html += `<div class="search-stats">共找到 ${searchState.total} 条结果，当前第 ${searchState.currentPage}/${searchState.totalPages} 页</div>`;
+            
             data.results.forEach((r, i) => {
                 const content = r.content || JSON.stringify(r);
                 const score = r.score || 0;
@@ -630,11 +648,14 @@ async function searchKnowledge() {
                 
                 // 匹配类型标签
                 const matchTypeLabel = matchType === 'keyword' ? '🔑 关键词' : '🧠 语义';
+                
+                // 计算全局序号
+                const globalIndex = (searchState.currentPage - 1) * searchState.pageSize + i + 1;
 
                 html += `
                     <div class="search-result-item">
                         <div class="search-result-header">
-                            <div class="search-result-title">📄 结果 ${i + 1}</div>
+                            <div class="search-result-title">📄 结果 ${globalIndex}</div>
                             <div class="search-result-score">
                                 <span class="relevance-badge ${relevanceClass}">相关度: ${relevanceLabel}</span>
                                 <span class="match-type-badge">${matchTypeLabel}</span>
@@ -652,6 +673,47 @@ async function searchKnowledge() {
                     </div>
                 `;
             });
+            
+            // 添加分页控件
+            if (searchState.totalPages > 1) {
+                html += '<div class="search-pagination">';
+                
+                // 上一页按钮
+                if (searchState.currentPage > 1) {
+                    html += `<button class="pagination-btn" onclick="searchKnowledge(${searchState.currentPage - 1})">◀ 上一页</button>`;
+                }
+                
+                // 页码
+                const maxVisible = 5;
+                let startPage = Math.max(1, searchState.currentPage - Math.floor(maxVisible / 2));
+                let endPage = Math.min(searchState.totalPages, startPage + maxVisible - 1);
+                
+                if (endPage - startPage < maxVisible - 1) {
+                    startPage = Math.max(1, endPage - maxVisible + 1);
+                }
+                
+                if (startPage > 1) {
+                    html += `<button class="pagination-btn" onclick="searchKnowledge(1)">1</button>`;
+                    if (startPage > 2) html += '<span class="pagination-info">...</span>';
+                }
+                
+                for (let i = startPage; i <= endPage; i++) {
+                    html += `<button class="pagination-btn ${i === searchState.currentPage ? 'active' : ''}" onclick="searchKnowledge(${i})">${i}</button>`;
+                }
+                
+                if (endPage < searchState.totalPages) {
+                    if (endPage < searchState.totalPages - 1) html += '<span class="pagination-info">...</span>';
+                    html += `<button class="pagination-btn" onclick="searchKnowledge(${searchState.totalPages})">${searchState.totalPages}</button>`;
+                }
+                
+                // 下一页按钮
+                if (searchState.currentPage < searchState.totalPages) {
+                    html += `<button class="pagination-btn" onclick="searchKnowledge(${searchState.currentPage + 1})">下一页 ▶</button>`;
+                }
+                
+                html += '</div>';
+            }
+            
             elements.searchResults.innerHTML = html;
         } else {
             elements.searchResults.innerHTML = `
@@ -2177,18 +2239,6 @@ async function startMaintenance() {
     const description = elements.maintDesc.value.trim();
     if (!description) {
         alert('请输入维护需求描述');
-        return;
-    }
-
-    // 输入校验：最少10个字符
-    if (description.length < 10) {
-        elements.maintCotArea.innerHTML = `
-            <div class="cot-step" style="color: #f59e0b;">⚠️ 输入内容过短</div>
-            <div class="cot-text">请详细描述维护需求，至少10个字符。</div>
-            <div class="cot-text" style="color: #64748b; margin-top: 8px;">
-                例如：CESSNA 172 需要进行100小时定期检查，包括更换滑油和检查起落架
-            </div>
-        `;
         return;
     }
 

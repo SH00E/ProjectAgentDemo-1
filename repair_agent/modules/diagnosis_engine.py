@@ -143,7 +143,7 @@ class RepairDiagnosisEngine:
                 keyword_scroll = client.scroll(
                     collection_name=collection_name,
                     scroll_filter=keyword_filter,
-                    limit=5,
+                    limit=20,
                     with_payload=True
                 )
                 
@@ -223,7 +223,7 @@ class RepairDiagnosisEngine:
                 results_cn = client.query_points(
                     collection_name=collection_name,
                     query=vector_cn,
-                    limit=5,
+                    limit=20,
                     with_payload=True
                 ).points
                 
@@ -257,7 +257,7 @@ class RepairDiagnosisEngine:
                     results_en = client.query_points(
                         collection_name=collection_name,
                         query=vector_en,
-                        limit=5,
+                        limit=20,
                         with_payload=True
                     ).points
                     
@@ -283,7 +283,7 @@ class RepairDiagnosisEngine:
             # ==================== 4. 合并结果 ====================
             all_results = {**keyword_results, **vector_results}
             sorted_results = sorted(all_results.values(), key=lambda x: x["score"], reverse=True)
-            return sorted_results[:5]
+            return sorted_results[:20]
             
         except Exception as e:
             logger.warning(f"⚠️ 知识检索失败: {e}")
