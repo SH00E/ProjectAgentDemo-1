@@ -57,51 +57,20 @@ h2 {
     color: #1e293b;
 }
 
-/* ==================== Logo 横幅 ==================== */
-
-.logo-banner {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 24px 0 16px;
-    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.logo-banner-img {
-    width: 72px;
-    height: 72px;
-    object-fit: contain;
-    margin-bottom: 12px;
-}
-
-.logo-banner-title {
-    font-size: 28px;
-    font-weight: 700;
-    color: #1e293b;
-    margin-bottom: 4px;
-}
-
-.logo-banner-subtitle {
-    font-size: 14px;
-    color: #64748b;
-}
-
 /* ==================== 头部 ==================== */
 
 .header {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
     align-items: center;
-    padding: 12px 0;
+    padding: 16px 0;
     border-bottom: 1px solid #e2e8f0;
     background: white;
     position: sticky;
     top: 0;
     z-index: 100;
     margin: 0 -20px;
-    padding: 12px 20px;
+    padding: 16px 20px;
 }
 
 .header-content h1 {
@@ -115,8 +84,8 @@ h2 {
 }
 
 .header-logo {
-    width: 48px;
-    height: 48px;
+    width: 56px;
+    height: 56px;
     object-fit: contain;
 }
 
