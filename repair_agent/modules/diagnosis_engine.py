@@ -135,6 +135,14 @@ class RepairDiagnosisEngine:
                         part = part.strip()
                         if part and len(part) >= 2 and part not in query_parts:
                             query_parts.append(part)
+                # 对中文查询生成2-3字滑动窗口子词
+                for part in list(query_parts):
+                    if len(part) >= 2:
+                        for win_size in [2, 3]:
+                            for k in range(len(part) - win_size + 1):
+                                token = part[k:k+win_size]
+                                if token not in query_parts:
+                                    query_parts.append(token)
                 
                 # 使用 MatchText 进行模糊匹配，支持多个查询词
                 keyword_conditions = []
@@ -186,20 +194,17 @@ class RepairDiagnosisEngine:
                     conn.row_factory = sqlite3.Row
                     cursor = conn.cursor()
                     
-                    like_query = f"%{query}%"
-                    cursor.execute('''
-                        SELECT * FROM cases 
-                        WHERE title LIKE ? 
-                           OR device_type LIKE ?
-                           OR fault_symptom LIKE ?
-                           OR fault_cause LIKE ?
-                           OR solution LIKE ?
-                           OR parts_used LIKE ?
-                           OR notes LIKE ?
-                           OR maintenance_type LIKE ?
-                           OR maintenance_cycle LIKE ?
-                           OR maintenance_standard LIKE ?
-                    ''', [like_query] * 10)
+                    sql_conditions = []
+                    sql_params = []
+                    for qp in query_parts:
+                        like_param = f"%{qp}%"
+                        sql_conditions.append('''(title LIKE ? OR device_type LIKE ? OR fault_symptom LIKE ?
+                                  OR fault_cause LIKE ? OR solution LIKE ? OR parts_used LIKE ?
+                                  OR notes LIKE ? OR maintenance_type LIKE ? OR maintenance_cycle LIKE ?
+                                  OR maintenance_standard LIKE ?)''')
+                        sql_params.extend([like_param] * 10)
+                    if sql_conditions:
+                        cursor.execute('SELECT DISTINCT * FROM cases WHERE ' + ' OR '.join(sql_conditions), sql_params)
                     
                     rows = cursor.fetchall()
                     conn.close()
