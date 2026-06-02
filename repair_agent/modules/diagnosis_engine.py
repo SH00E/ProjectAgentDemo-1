@@ -224,7 +224,8 @@ class RepairDiagnosisEngine:
                             "manufacturer": "",
                             "description": (row["fault_symptom"] if case_type == "repair" else (row["maintenance_type"] if "maintenance_type" in row.keys() else "")) or "",
                             "problem": (row["fault_cause"] if case_type == "repair" else (row["maintenance_cycle"] if "maintenance_cycle" in row.keys() else "")) or "",
-                            "action": row["solution"] or ""
+                            "action": row["solution"] or "",
+                            "case_type": case_type
                         }
             except Exception as e:
                 logger.warning(f"SQLite 关键词搜索失败: {e}")
