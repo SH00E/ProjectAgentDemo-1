@@ -1295,6 +1295,151 @@ textarea {
     background: #b91c1c;
 }
 
+/* ==================== 详情模态框 ==================== */
+
+#detail-modal .modal-container {
+    background: white;
+    border-radius: 12px;
+    width: 50%;
+    max-width: 600px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+#detail-modal .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+#detail-modal .modal-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0;
+}
+
+#detail-modal .modal-close-btn {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: #f1f5f9;
+    border-radius: 6px;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    color: #64748b;
+}
+
+#detail-modal .modal-close-btn:hover {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+#detail-modal .modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* 详情模态框内容样式 */
+
+.detail-section {
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.detail-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.detail-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+
+.detail-value {
+    font-size: 14px;
+    color: #1e293b;
+    line-height: 1.6;
+}
+
+.detail-value.large {
+    font-size: 16px;
+}
+
+.detail-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.detail-tag {
+    padding: 4px 10px;
+    background: #f1f5f9;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #475569;
+}
+
+.detail-relevance {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.detail-relevance.high {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.detail-relevance.medium {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.detail-relevance.low {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* 可点击的内容项 */
+
+.clickable-item {
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.clickable-item:hover {
+    background: #f8fafc;
+    border-color: #3b82f6;
+}
+
+.clickable-hint {
+    font-size: 11px;
+    color: #94a3b8;
+    float: right;
+}
+
 /* ==================== 案例表单行 ==================== */
     display: flex;
     flex-direction: column;

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>保障智能助手</title>
-    <link rel="stylesheet" href="/static/style.css?v=20260605">
+    <link rel="stylesheet" href="/static/style.css?v=20260606">
     <script src="/static/d3.min.js"></script>
 </head>
 <body>
@@ -521,6 +521,19 @@
 
         <button id="btn-refresh-stats" class="btn btn-outline" style="margin-top: 16px;">🔄 刷新数据</button>
     </main>
+
+    <!-- 通用详情模态框 -->
+    <div id="detail-modal" class="modal-overlay hidden">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 id="modal-title" class="modal-title">详情</h3>
+                <button id="modal-close" class="modal-close-btn">✕</button>
+            </div>
+            <div id="modal-content" class="modal-body">
+                <!-- 内容由 JS 动态填充 -->
+            </div>
+        </div>
+    </div>
 
     <script src="/static/app.js"></script>
 </body>

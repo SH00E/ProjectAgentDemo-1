@@ -80,7 +80,13 @@ const elements = {
     feedbackCorrect: document.getElementById('feedback-correct'),
     btnSubmitFeedback: document.getElementById('btn-submit-feedback'),
     feedbackResult: document.getElementById('feedback-result'),
-    feedbackList: document.getElementById('feedback-list')
+    feedbackList: document.getElementById('feedback-list'),
+
+    // 详情模态框
+    detailModal: document.getElementById('detail-modal'),
+    modalTitle: document.getElementById('modal-title'),
+    modalContent: document.getElementById('modal-content'),
+    modalClose: document.getElementById('modal-close')
 };
 
 // ==================== 初始化 ====================
@@ -94,6 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initCase();
     initFeedback();
     initStats();
+    initDetailModal();
     checkStatus();
     loadSearchHistory();
 });
@@ -367,12 +374,30 @@ function handleRAG(data) {
             const relevanceClass = relevance === '高' ? 'relevance-high' : relevance === '中' ? 'relevance-medium' : 'relevance-low';
             const matchTypeLabel = r.match_type === 'keyword' ? '🔑' : '🧠';
             
+            // 存储数据到全局变量以便点击时使用
+            const evidenceData = {
+                title: `证据 #${i + 1}`,
+                source: r.source_label,
+                relevance: relevance,
+                matchType: r.match_type,
+                aircraftModel: r.aircraft_model,
+                recordId: r.record_id,
+                content: r.content,
+                description: r.description,
+                problem: r.problem,
+                action: r.action
+            };
+            const dataIndex = window._evidenceData ? window._evidenceData.length : 0;
+            if (!window._evidenceData) window._evidenceData = [];
+            window._evidenceData.push(evidenceData);
+            
             html += `
-                <div class="evidence-item">
+                <div class="evidence-item clickable-item" onclick="showEvidenceDetail(window._evidenceData[${dataIndex}])">
                     <div class="evidence-header">
                         <span class="evidence-num">#${i + 1}</span>
                         <span class="evidence-source">${sourceIcon} ${escapeHtml(r.source_label)}</span>
                         <span class="relevance-badge ${relevanceClass}">${matchTypeLabel} ${relevance}</span>
+                        <span class="clickable-hint">点击查看详情</span>
                     </div>
                     <div class="evidence-content">${escapeHtml(r.content)}</div>
                     <div class="evidence-details">
@@ -443,6 +468,9 @@ function handleDiagnosis(data) {
 
     // 在证据链区域显示诊断依据
     if (data.evidence_chain && data.evidence_chain.length > 0) {
+        // 清空之前的证据数据
+        window._diagnosisEvidenceData = [];
+        
         let evidenceHtml = '<div class="evidence-chain">';
         evidenceHtml += '<div class="evidence-title">📋 诊断依据（证据链）</div>';
         data.evidence_chain.forEach((ev, i) => {
@@ -451,12 +479,29 @@ function handleDiagnosis(data) {
             const relevanceClass = relevance === '高' ? 'relevance-high' : relevance === '中' ? 'relevance-medium' : 'relevance-low';
             const matchTypeLabel = ev.match_type === 'keyword' ? '🔑' : '🧠';
             
+            // 存储数据
+            const evidenceData = {
+                title: `诊断依据 #${i + 1}`,
+                source: ev.source_label,
+                relevance: relevance,
+                matchType: ev.match_type,
+                aircraftModel: ev.aircraft_model,
+                recordId: ev.record_id,
+                content: ev.content,
+                description: ev.description,
+                problem: ev.problem,
+                action: ev.action
+            };
+            window._diagnosisEvidenceData.push(evidenceData);
+            const dataIndex = window._diagnosisEvidenceData.length - 1;
+            
             evidenceHtml += `
-                <div class="evidence-item">
+                <div class="evidence-item clickable-item" onclick="showEvidenceDetail(window._diagnosisEvidenceData[${dataIndex}])">
                     <div class="evidence-header">
                         <span class="evidence-num">#${i + 1}</span>
                         <span class="evidence-source">${sourceIcon} ${escapeHtml(ev.source_label)}</span>
                         <span class="relevance-badge ${relevanceClass}">${matchTypeLabel} ${relevance}</span>
+                        <span class="clickable-hint">点击查看详情</span>
                     </div>
                     <div class="evidence-content">${escapeHtml(ev.content)}</div>
                     <div class="evidence-details">
@@ -669,8 +714,24 @@ async function searchKnowledge(page = 1) {
                 // 计算全局序号
                 const globalIndex = (searchState.currentPage - 1) * searchState.pageSize + i + 1;
 
+                // 存储数据用于点击展开
+                if (!window._searchResultData) window._searchResultData = [];
+                const dataIndex = window._searchResultData.length;
+                window._searchResultData.push({
+                    title: `搜索结果 ${globalIndex}`,
+                    source: source,
+                    relevance: relevance,
+                    matchType: matchType,
+                    aircraftModel: aircraftModel,
+                    recordId: recordId,
+                    content: content,
+                    description: r.description,
+                    problem: r.problem,
+                    action: r.action
+                });
+
                 html += `
-                    <div class="search-result-item">
+                    <div class="search-result-item clickable-item" onclick="showEvidenceDetail(window._searchResultData[${dataIndex}])">
                         <div class="search-result-header">
                             <div class="search-result-title">📄 结果 ${globalIndex}</div>
                             <div class="search-result-score">
@@ -686,6 +747,7 @@ async function searchKnowledge(page = 1) {
                         </div>
                         <div class="search-result-meta">
                             <span>📍 来源: ${escapeHtml(source)}</span>
+                            <span class="clickable-hint">点击查看详情</span>
                         </div>
                     </div>
                 `;
@@ -1162,7 +1224,7 @@ async function loadCases() {
                 }
 
                 html += `
-                    <div class="case-item ${typeClass}" data-id="${c.id}">
+                    <div class="case-item ${typeClass} clickable-item" data-id="${c.id}" onclick="showCaseDetail(${JSON.stringify(c).replace(/"/g, '&quot;')})">
                         <div class="case-item-header">
                             <div>
                                 <span class="case-type-tag ${typeClass}">${typeLabel}</span>
@@ -1170,7 +1232,8 @@ async function loadCases() {
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <span class="case-item-time">${createdAt ? escapeHtml(createdAt.substring(0, 10)) : ''}</span>
-                                <button class="case-delete-btn" onclick="confirmDeleteCase(${c.id}, '${escapeHtml(title).replace(/'/g, "\\'")}')" title="删除案例">🗑️</button>
+                                <span class="clickable-hint">点击查看详情</span>
+                                <button class="case-delete-btn" onclick="event.stopPropagation(); confirmDeleteCase(${c.id}, '${escapeHtml(title).replace(/'/g, "\\'")}')" title="删除案例">🗑️</button>
                             </div>
                         </div>
                         ${deviceType ? `<div class="case-item-field"><strong>🛩️ 设备类型:</strong> ${escapeHtml(deviceType)}</div>` : ''}
@@ -2402,6 +2465,9 @@ function handleMaintenanceRAG(data) {
     if (data.results && data.results.length > 0) {
         appendToMaintCot(`<div class="cot-step-sub">📚 检索到 ${data.total} 条相关维护记录</div>`);
         
+        // 清空之前的证据数据
+        window._maintenanceEvidenceData = [];
+        
         let html = '<div class="evidence-chain">';
         data.results.forEach((r, i) => {
             const sourceIcon = r.source === 'faa' ? '✈️' : r.source === 'maintnet' ? '🔧' : r.source === 'user_case' ? '📝' : '📖';
@@ -2409,12 +2475,29 @@ function handleMaintenanceRAG(data) {
             const relevanceClass = relevance === '高' ? 'relevance-high' : relevance === '中' ? 'relevance-medium' : 'relevance-low';
             const matchTypeLabel = r.match_type === 'keyword' ? '🔑' : '🧠';
             
+            // 存储数据
+            const evidenceData = {
+                title: `维护依据 #${i + 1}`,
+                source: r.source_label,
+                relevance: relevance,
+                matchType: r.match_type,
+                aircraftModel: r.aircraft_model,
+                recordId: r.record_id,
+                content: r.content,
+                description: r.description,
+                problem: r.problem,
+                action: r.action
+            };
+            window._maintenanceEvidenceData.push(evidenceData);
+            const dataIndex = window._maintenanceEvidenceData.length - 1;
+            
             html += `
-                <div class="evidence-item">
+                <div class="evidence-item clickable-item" onclick="showEvidenceDetail(window._maintenanceEvidenceData[${dataIndex}])">
                     <div class="evidence-header">
                         <span class="evidence-num">#${i + 1}</span>
                         <span class="evidence-source">${sourceIcon} ${escapeHtml(r.source_label)}</span>
                         <span class="relevance-badge ${relevanceClass}">${matchTypeLabel} ${relevance}</span>
+                        <span class="clickable-hint">点击查看详情</span>
                     </div>
                     <div class="evidence-content">${escapeHtml(r.content)}</div>
                     <div class="evidence-details">
@@ -2845,4 +2928,263 @@ async function loadFeedbacks() {
     } catch (e) {
         console.error('加载反馈失败:', e);
     }
+}
+
+// ==================== 详情模态框 ====================
+
+function initDetailModal() {
+    // 关闭按钮
+    if (elements.modalClose) {
+        elements.modalClose.addEventListener('click', closeDetailModal);
+    }
+    
+    // 点击遮罩关闭
+    if (elements.detailModal) {
+        elements.detailModal.addEventListener('click', (e) => {
+            if (e.target === elements.detailModal) {
+                closeDetailModal();
+            }
+        });
+    }
+    
+    // ESC 键关闭
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeDetailModal();
+        }
+    });
+}
+
+function openDetailModal(title, content) {
+    if (!elements.detailModal) return;
+    
+    elements.modalTitle.textContent = title;
+    elements.modalContent.innerHTML = content;
+    elements.detailModal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden'; // 防止背景滚动
+}
+
+function closeDetailModal() {
+    if (!elements.detailModal) return;
+    
+    elements.detailModal.classList.add('hidden');
+    document.body.style.overflow = ''; // 恢复滚动
+}
+
+// 证据项点击展开详情
+function showEvidenceDetail(data) {
+    const title = data.title || '详情';
+    let html = '';
+    
+    // 来源信息
+    if (data.source) {
+        html += `
+            <div class="detail-section">
+                <div class="detail-label">来源</div>
+                <div class="detail-value">${escapeHtml(data.source)}</div>
+            </div>
+        `;
+    }
+    
+    // 相关度
+    if (data.relevance) {
+        const relevanceClass = data.relevance === '高' ? 'high' : data.relevance === '中' ? 'medium' : 'low';
+        html += `
+            <div class="detail-section">
+                <div class="detail-label">相关度</div>
+                <div class="detail-value">
+                    <span class="detail-relevance ${relevanceClass}">${data.relevance}</span>
+                    ${data.matchType ? `<span style="margin-left: 8px; font-size: 12px; color: #64748b;">${data.matchType === 'keyword' ? '🔑 关键词匹配' : '🧠 语义匹配'}</span>` : ''}
+                </div>
+            </div>
+        `;
+    }
+    
+    // 设备型号
+    if (data.aircraftModel) {
+        html += `
+            <div class="detail-section">
+                <div class="detail-label">设备型号</div>
+                <div class="detail-value">${escapeHtml(data.aircraftModel)}</div>
+            </div>
+        `;
+    }
+    
+    // 记录ID
+    if (data.recordId) {
+        html += `
+            <div class="detail-section">
+                <div class="detail-label">记录ID</div>
+                <div class="detail-value">${escapeHtml(data.recordId)}</div>
+            </div>
+        `;
+    }
+    
+    // 内容
+    if (data.content) {
+        html += `
+            <div class="detail-section">
+                <div class="detail-label">内容</div>
+                <div class="detail-value large">${escapeHtml(data.content).replace(/\n/g, '<br>')}</div>
+            </div>
+        `;
+    }
+    
+    // 故障现象
+    if (data.description) {
+        html += `
+            <div class="detail-section">
+                <div class="detail-label">故障现象 / 维护类型</div>
+                <div class="detail-value">${escapeHtml(data.description)}</div>
+            </div>
+        `;
+    }
+    
+    // 故障原因 / 维护操作
+    if (data.problem) {
+        html += `
+            <div class="detail-section">
+                <div class="detail-label">故障原因 / 维护操作</div>
+                <div class="detail-value">${escapeHtml(data.problem)}</div>
+            </div>
+        `;
+    }
+    
+    // 解决方案
+    if (data.action) {
+        html += `
+            <div class="detail-section">
+                <div class="detail-label">解决方案</div>
+                <div class="detail-value">${escapeHtml(data.action).replace(/\n/g, '<br>')}</div>
+            </div>
+        `;
+    }
+    
+    openDetailModal(title, html);
+}
+
+// 案例项点击展开详情
+function showCaseDetail(caseData) {
+    const title = caseData.title || '案例详情';
+    let html = '';
+    
+    // 案例类型
+    const caseType = caseData.case_type || 'repair';
+    const typeLabel = caseType === 'repair' ? '🔧 维修案例' : '🛠️ 维护案例';
+    html += `
+        <div class="detail-section">
+            <div class="detail-label">案例类型</div>
+            <div class="detail-value">${typeLabel}</div>
+        </div>
+    `;
+    
+    // 设备类型
+    if (caseData.device_type) {
+        html += `
+            <div class="detail-section">
+                <div class="detail-label">设备类型</div>
+                <div class="detail-value">${escapeHtml(caseData.device_type)}</div>
+            </div>
+        `;
+    }
+    
+    // 维修专用字段
+    if (caseType === 'repair') {
+        if (caseData.fault_symptom) {
+            html += `
+                <div class="detail-section">
+                    <div class="detail-label">故障现象</div>
+                    <div class="detail-value">${escapeHtml(caseData.fault_symptom)}</div>
+                </div>
+            `;
+        }
+        if (caseData.fault_cause) {
+            html += `
+                <div class="detail-section">
+                    <div class="detail-label">故障原因</div>
+                    <div class="detail-value">${escapeHtml(caseData.fault_cause)}</div>
+                </div>
+            `;
+        }
+    }
+    
+    // 维护专用字段
+    if (caseType === 'maintenance') {
+        if (caseData.maintenance_type) {
+            html += `
+                <div class="detail-section">
+                    <div class="detail-label">维护类型</div>
+                    <div class="detail-value">${escapeHtml(caseData.maintenance_type)}</div>
+                </div>
+            `;
+        }
+        if (caseData.maintenance_cycle) {
+            html += `
+                <div class="detail-section">
+                    <div class="detail-label">维护周期</div>
+                    <div class="detail-value">${escapeHtml(caseData.maintenance_cycle)}</div>
+                </div>
+            `;
+        }
+        if (caseData.maintenance_standard) {
+            html += `
+                <div class="detail-section">
+                    <div class="detail-label">维护标准</div>
+                    <div class="detail-value">${escapeHtml(caseData.maintenance_standard)}</div>
+                </div>
+            `;
+        }
+    }
+    
+    // 解决方案
+    if (caseData.solution) {
+        html += `
+            <div class="detail-section">
+                <div class="detail-label">${caseType === 'repair' ? '维修方案' : '维护方案'}</div>
+                <div class="detail-value large">${escapeHtml(caseData.solution).replace(/\n/g, '<br>')}</div>
+            </div>
+        `;
+    }
+    
+    // 使用备件
+    if (caseData.parts_used) {
+        html += `
+            <div class="detail-section">
+                <div class="detail-label">使用备件/材料</div>
+                <div class="detail-value">${escapeHtml(caseData.parts_used)}</div>
+            </div>
+        `;
+    }
+    
+    // 维修人员
+    if (caseData.technician) {
+        html += `
+            <div class="detail-section">
+                <div class="detail-label">维修/维护人员</div>
+                <div class="detail-value">${escapeHtml(caseData.technician)}</div>
+            </div>
+        `;
+    }
+    
+    // 备注
+    if (caseData.notes) {
+        html += `
+            <div class="detail-section">
+                <div class="detail-label">备注</div>
+                <div class="detail-value">${escapeHtml(caseData.notes)}</div>
+            </div>
+        `;
+    }
+    
+    // 创建时间
+    if (caseData.created_at) {
+        html += `
+            <div class="detail-section">
+                <div class="detail-label">创建时间</div>
+                <div class="detail-value">${escapeHtml(caseData.created_at)}</div>
+            </div>
+        `;
+    }
+    
+    openDetailModal(title, html);
 }
