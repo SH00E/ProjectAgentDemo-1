@@ -210,8 +210,8 @@ class RepairDiagnosisEngine:
                             "record_id": rid,
                             "aircraft_model": row["device_type"],
                             "manufacturer": "",
-                            "description": row["fault_symptom"] if case_type == "repair" else "",
-                            "problem": row["fault_symptom"] if case_type == "repair" else "",
+                            "description": row["fault_symptom"] if case_type == "repair" else (row["maintenance_type"] if "maintenance_type" in row.keys() else ""),
+                            "problem": row["fault_cause"] if case_type == "repair" else (row["maintenance_cycle"] if "maintenance_cycle" in row.keys() else ""),
                             "action": row["solution"]
                         }
             except Exception as e:

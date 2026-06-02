@@ -2773,6 +2773,7 @@ async function askQuestion() {
     }
 
     qaState.isProcessing = true;
+    qaState.answerText = '';
     elements.btnAsk.disabled = true;
     elements.btnAsk.textContent = '⏳ 思考中...';
     elements.qaAnswer.innerHTML = '<div class="qa-loading"><span class="loading-icon">🧠</span><p>正在分析问题...</p></div>';
@@ -2784,17 +2785,82 @@ async function askQuestion() {
             body: JSON.stringify({ question })
         });
 
-        const data = await response.json();
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || '请求失败');
+        }
 
-        if (data.success) {
-            let html = '';
-            
-            // 关键词解析
-            if (data.keywords && data.keywords.length > 0) {
-                html += '<div class="qa-section">';
-                html += '<h3>🔑 关键词解析</h3>';
+        // 使用 ReadableStream 处理 SSE
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+
+            // 处理完整的 SSE 事件
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+
+            let eventType = '';
+            let eventData = '';
+
+            for (const line of lines) {
+                if (line.startsWith('event: ')) {
+                    eventType = line.substring(7).trim();
+                } else if (line.startsWith('data: ')) {
+                    eventData = line.substring(6).trim();
+                    if (eventType && eventData) {
+                        handleQASSEEvent(eventType, eventData);
+                        eventType = '';
+                        eventData = '';
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        elements.qaAnswer.innerHTML = `<div class="qa-error">❌ 请求失败: ${e.message}</div>`;
+    } finally {
+        qaState.isProcessing = false;
+        elements.btnAsk.disabled = false;
+        elements.btnAsk.textContent = '💡 提问';
+    }
+}
+
+function handleQASSEEvent(eventType, dataStr) {
+    try {
+        const data = JSON.parse(dataStr);
+
+        switch (eventType) {
+            case 'step':
+                // 显示步骤信息
+                let stepDiv = document.getElementById('qa-steps');
+                if (!stepDiv) {
+                    stepDiv = document.createElement('div');
+                    stepDiv.id = 'qa-steps';
+                    stepDiv.className = 'qa-steps';
+                    elements.qaAnswer.innerHTML = '';
+                    elements.qaAnswer.appendChild(stepDiv);
+                }
+                stepDiv.innerHTML += `<div class="qa-step">${escapeHtml(data.text)}</div>`;
+                break;
+
+            case 'keywords':
+                // 显示关键词解析
+                let keywordsDiv = document.getElementById('qa-keywords');
+                if (!keywordsDiv) {
+                    keywordsDiv = document.createElement('div');
+                    keywordsDiv.id = 'qa-keywords';
+                    keywordsDiv.className = 'qa-section';
+                    elements.qaAnswer.appendChild(keywordsDiv);
+                }
+                
+                let keywordsHtml = '<h3>🔑 关键词解析</h3>';
                 data.keywords.forEach((kw, i) => {
-                    html += `
+                    keywordsHtml += `
                         <div class="qa-keyword-item">
                             <div class="qa-keyword-title">
                                 <span class="qa-keyword-num">${i + 1}</span>
@@ -2805,25 +2871,46 @@ async function askQuestion() {
                         </div>
                     `;
                 });
-                html += '</div>';
-            }
-            
-            // 综合回答
-            html += '<div class="qa-section">';
-            html += '<h3>📋 综合解答</h3>';
-            html += `<div class="qa-answer-content">${escapeHtml(data.answer).replace(/\n/g, '<br>')}</div>`;
-            html += '</div>';
-            
-            elements.qaAnswer.innerHTML = html;
-        } else {
-            elements.qaAnswer.innerHTML = `<div class="qa-error">❌ ${escapeHtml(data.error || '回答失败')}</div>`;
+                keywordsDiv.innerHTML = keywordsHtml;
+                break;
+
+            case 'answer_chunk':
+                // 流式显示回答
+                qaState.answerText += data.chunk;
+                
+                let answerDiv = document.getElementById('qa-answer-content');
+                if (!answerDiv) {
+                    // 创建回答区域
+                    const answerSection = document.createElement('div');
+                    answerSection.className = 'qa-section';
+                    answerSection.innerHTML = '<h3>📋 综合解答</h3>';
+                    elements.qaAnswer.appendChild(answerSection);
+                    
+                    answerDiv = document.createElement('div');
+                    answerDiv.id = 'qa-answer-content';
+                    answerDiv.className = 'qa-answer-content';
+                    answerSection.appendChild(answerDiv);
+                }
+                
+                answerDiv.textContent = qaState.answerText;
+                // 滚动到底部
+                elements.qaAnswer.scrollTop = elements.qaAnswer.scrollHeight;
+                break;
+
+            case 'done':
+                // 完成
+                let doneStep = document.createElement('div');
+                doneStep.className = 'qa-step';
+                doneStep.textContent = '✅ 回答完成';
+                elements.qaAnswer.appendChild(doneStep);
+                break;
+
+            case 'error':
+                elements.qaAnswer.innerHTML = `<div class="qa-error">❌ ${escapeHtml(data.message)}</div>`;
+                break;
         }
     } catch (e) {
-        elements.qaAnswer.innerHTML = `<div class="qa-error">❌ 请求失败: ${e.message}</div>`;
-    } finally {
-        qaState.isProcessing = false;
-        elements.btnAsk.disabled = false;
-        elements.btnAsk.textContent = '💡 提问';
+        console.error('解析 QA SSE 事件失败:', e, dataStr);
     }
 }
 

@@ -57,20 +57,51 @@ h2 {
     color: #1e293b;
 }
 
+/* ==================== Logo 横幅 ==================== */
+
+.logo-banner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 0 16px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.logo-banner-img {
+    width: 72px;
+    height: 72px;
+    object-fit: contain;
+    margin-bottom: 12px;
+}
+
+.logo-banner-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 4px;
+}
+
+.logo-banner-subtitle {
+    font-size: 14px;
+    color: #64748b;
+}
+
 /* ==================== 头部 ==================== */
 
 .header {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
-    padding: 16px 0;
+    padding: 12px 0;
     border-bottom: 1px solid #e2e8f0;
     background: white;
     position: sticky;
     top: 0;
     z-index: 100;
     margin: 0 -20px;
-    padding: 16px 20px;
+    padding: 12px 20px;
 }
 
 .header-content h1 {
@@ -2434,6 +2465,21 @@ textarea {
     font-size: 15px;
     color: #1e293b;
     line-height: 1.8;
+}
+
+.qa-steps {
+    margin-bottom: 16px;
+}
+
+.qa-step {
+    padding: 8px 12px;
+    background: #f0f9ff;
+    border-left: 3px solid #3b82f6;
+    margin-bottom: 6px;
+    border-radius: 0 6px 6px 0;
+    font-size: 14px;
+    color: #1e40af;
+    animation: fadeInUp 0.3s ease;
 }
 
 .qa-error {

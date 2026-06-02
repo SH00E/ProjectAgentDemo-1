@@ -574,7 +574,7 @@ async def search_knowledge(request: Request):
                     "aircraft_model": row["device_type"],
                     "manufacturer": "",
                     "description": row["fault_symptom"] if case_type == "repair" else (row["maintenance_type"] if "maintenance_type" in row.keys() else ""),
-                    "problem": row["fault_symptom"] if case_type == "repair" else (row["maintenance_type"] if "maintenance_type" in row.keys() else ""),
+                    "problem": row["fault_cause"] if case_type == "repair" else (row["maintenance_cycle"] if "maintenance_cycle" in row.keys() else ""),
                     "action": row["solution"],
                     "case_type": case_type
                 }
@@ -1189,7 +1189,7 @@ async def get_vector_space():
 
 @app.post("/api/ask")
 async def ask_question(request: Request):
-    """智能问答 - 递归关键词解释"""
+    """智能问答 - SSE流式输出"""
     if agent_state["agent"] is None:
         return JSONResponse(status_code=503, content={"error": "系统未就绪"})
 
@@ -1198,11 +1198,14 @@ async def ask_question(request: Request):
     if not question:
         return JSONResponse(status_code=400, content={"error": "请输入问题"})
 
-    try:
-        llm = agent_state["agent"].llm
-        
-        # 第一步：分析问题，提取关键词
-        analysis_prompt = f"""请分析以下问题，提取3-5个核心关键词或概念，并简要说明每个关键词与问题的关系。
+    def qa_stream():
+        try:
+            llm = agent_state["agent"].llm
+            
+            # 第一步：分析问题，提取关键词
+            yield sse_event("step", {"text": "🧠 正在分析问题..."})
+            
+            analysis_prompt = f"""请分析以下问题，提取3-5个核心关键词或概念，并简要说明每个关键词与问题的关系。
 
 问题：{question}
 
@@ -1214,38 +1217,41 @@ async def ask_question(request: Request):
     ]
 }}"""
 
-        analysis_messages = [
-            {"role": "system", "content": "你是一个专业知识分析师，擅长提取和解释专业概念。"},
-            {"role": "user", "content": analysis_prompt}
-        ]
-        
-        analysis_result = llm.invoke(analysis_messages)
-        
-        # 解析关键词
-        try:
-            import json
-            # 尝试从响应中提取JSON
-            if "```json" in analysis_result:
-                json_str = analysis_result.split("```json")[1].split("```")[0]
-            elif "```" in analysis_result:
-                json_str = analysis_result.split("```")[1].split("```")[0]
-            else:
-                json_str = analysis_result
+            analysis_messages = [
+                {"role": "system", "content": "你是一个专业知识分析师，擅长提取和解释专业概念。"},
+                {"role": "user", "content": analysis_prompt}
+            ]
             
-            keywords_data = json.loads(json_str.strip())
-            keywords = keywords_data.get("keywords", [])
-        except Exception as e:
-            logger.warning(f"解析关键词失败: {e}")
-            keywords = [{"keyword": question[:20], "relation": "核心问题"}]
-        
-        # 第二步：解释每个关键词
-        keyword_explanations = []
-        for kw in keywords[:5]:  # 最多处理5个关键词
-            keyword = kw.get("keyword", "")
-            if not keyword:
-                continue
+            analysis_result = llm.invoke(analysis_messages)
             
-            explain_prompt = f"""请用简洁的语言解释以下专业概念（100-200字）：
+            # 解析关键词
+            try:
+                import json
+                if "```json" in analysis_result:
+                    json_str = analysis_result.split("```json")[1].split("```")[0]
+                elif "```" in analysis_result:
+                    json_str = analysis_result.split("```")[1].split("```")[0]
+                else:
+                    json_str = analysis_result
+                
+                keywords_data = json.loads(json_str.strip())
+                keywords = keywords_data.get("keywords", [])
+            except Exception as e:
+                logger.warning(f"解析关键词失败: {e}")
+                keywords = [{"keyword": question[:20], "relation": "核心问题"}]
+            
+            yield sse_event("step", {"text": f"📝 提取到 {len(keywords)} 个关键词"})
+            
+            # 第二步：解释每个关键词
+            keyword_explanations = []
+            for i, kw in enumerate(keywords[:5]):
+                keyword = kw.get("keyword", "")
+                if not keyword:
+                    continue
+                
+                yield sse_event("step", {"text": f"📖 正在解析关键词 [{i+1}/{min(len(keywords), 5)}]: {keyword}"})
+                
+                explain_prompt = f"""请用简洁的语言解释以下专业概念（100-200字）：
 
 概念：{keyword}
 
@@ -1254,20 +1260,25 @@ async def ask_question(request: Request):
 2. 如果涉及专业术语，需要进一步解释
 3. 可以用类比帮助理解"""
 
-            explain_messages = [
-                {"role": "system", "content": "你是一个专业的技术教育专家，擅长用通俗语言解释复杂概念。"},
-                {"role": "user", "content": explain_prompt}
-            ]
+                explain_messages = [
+                    {"role": "system", "content": "你是一个专业的技术教育专家，擅长用通俗语言解释复杂概念。"},
+                    {"role": "user", "content": explain_prompt}
+                ]
+                
+                explanation = llm.invoke(explain_messages)
+                keyword_explanations.append({
+                    "keyword": keyword,
+                    "relation": kw.get("relation", ""),
+                    "explanation": explanation
+                })
             
-            explanation = llm.invoke(explain_messages)
-            keyword_explanations.append({
-                "keyword": keyword,
-                "relation": kw.get("relation", ""),
-                "explanation": explanation
-            })
-        
-        # 第三步：综合回答原始问题
-        synthesis_prompt = f"""请根据以下信息，综合回答用户的问题。
+            # 发送关键词解析结果
+            yield sse_event("keywords", {"keywords": keyword_explanations})
+            
+            # 第三步：综合回答原始问题（流式输出）
+            yield sse_event("step", {"text": "🧠 正在综合分析并生成回答..."})
+            
+            synthesis_prompt = f"""请根据以下信息，综合回答用户的问题。
 
 问题：{question}
 
@@ -1279,25 +1290,29 @@ async def ask_question(request: Request):
 2. 结合关键词的解释
 3. 逻辑清晰，易于理解"""
 
-        synthesis_messages = [
-            {"role": "system", "content": "你是一个专业的技术顾问，擅长综合分析和解答复杂问题。"},
-            {"role": "user", "content": synthesis_prompt}
-        ]
-        
-        final_answer = ""
-        for chunk in llm.stream_invoke(synthesis_messages):
-            final_answer += chunk
-        
-        return {
-            "success": True,
-            "question": question,
-            "keywords": keyword_explanations,
-            "answer": final_answer
+            synthesis_messages = [
+                {"role": "system", "content": "你是一个专业的技术顾问，擅长综合分析和解答复杂问题。"},
+                {"role": "user", "content": synthesis_prompt}
+            ]
+            
+            for chunk in llm.stream_invoke(synthesis_messages):
+                yield sse_event("answer_chunk", {"chunk": chunk})
+            
+            yield sse_event("done", {"success": True})
+            
+        except Exception as e:
+            logger.error(f"智能问答失败: {e}")
+            yield sse_event("error", {"message": f"问答失败: {str(e)}"})
+
+    return StreamingResponse(
+        qa_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
         }
-        
-    except Exception as e:
-        logger.error(f"智能问答失败: {e}")
-        return JSONResponse(status_code=500, content={"error": f"问答失败: {e}"})
+    )
 
 # ==================== 系统反馈 API ====================
 
