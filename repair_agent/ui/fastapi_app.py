@@ -898,6 +898,104 @@ async def get_history():
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"获取历史失败: {e}"})
 
+@app.get("/api/data-stats")
+async def get_data_stats():
+    """获取数据资产统计"""
+    try:
+        conn = sqlite3.connect(CASES_DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # 案例总数统计
+        cursor.execute("SELECT COUNT(*) as total FROM cases")
+        total_cases = cursor.fetchone()["total"]
+        
+        cursor.execute("SELECT COUNT(*) as total FROM cases WHERE case_type='repair'")
+        repair_cases = cursor.fetchone()["total"]
+        
+        cursor.execute("SELECT COUNT(*) as total FROM cases WHERE case_type='maintenance'")
+        maintenance_cases = cursor.fetchone()["total"]
+        
+        # 故障类型分布（维修案例的故障现象关键词提取）
+        cursor.execute("""
+            SELECT fault_symptom, COUNT(*) as count 
+            FROM cases 
+            WHERE case_type='repair' AND fault_symptom != '' 
+            GROUP BY fault_symptom 
+            ORDER BY count DESC 
+            LIMIT 10
+        """)
+        fault_distribution = [{"name": row["fault_symptom"][:20], "count": row["count"]} for row in cursor.fetchall()]
+        
+        # 设备类型分布
+        cursor.execute("""
+            SELECT device_type, COUNT(*) as count 
+            FROM cases 
+            WHERE device_type != '' 
+            GROUP BY device_type 
+            ORDER BY count DESC 
+            LIMIT 10
+        """)
+        device_distribution = [{"name": row["device_type"], "count": row["count"]} for row in cursor.fetchall()]
+        
+        # 维护类型分布
+        cursor.execute("""
+            SELECT maintenance_type, COUNT(*) as count 
+            FROM cases 
+            WHERE case_type='maintenance' AND maintenance_type != '' 
+            GROUP BY maintenance_type 
+            ORDER BY count DESC 
+            LIMIT 10
+        """)
+        maintenance_distribution = [{"name": row["maintenance_type"], "count": row["count"]} for row in cursor.fetchall()]
+        
+        # 最近添加的案例
+        cursor.execute("""
+            SELECT id, title, case_type, device_type, created_at 
+            FROM cases 
+            ORDER BY created_at DESC 
+            LIMIT 5
+        """)
+        recent_cases = [{
+            "id": row["id"],
+            "title": row["title"],
+            "case_type": row["case_type"],
+            "device_type": row["device_type"],
+            "created_at": row["created_at"]
+        } for row in cursor.fetchall()]
+        
+        conn.close()
+        
+        # 反馈统计
+        feedback_total = 0
+        try:
+            conn_fb = sqlite3.connect(FEEDBACK_DB_PATH)
+            cursor_fb = conn_fb.cursor()
+            cursor_fb.execute("SELECT COUNT(*) FROM feedback")
+            feedback_total = cursor_fb.fetchone()[0]
+            conn_fb.close()
+        except:
+            pass
+        
+        return {
+            "success": True,
+            "data": {
+                "summary": {
+                    "total_cases": total_cases,
+                    "repair_cases": repair_cases,
+                    "maintenance_cases": maintenance_cases,
+                    "feedback_count": feedback_total
+                },
+                "fault_distribution": fault_distribution,
+                "device_distribution": device_distribution,
+                "maintenance_distribution": maintenance_distribution,
+                "recent_cases": recent_cases
+            }
+        }
+    except Exception as e:
+        logger.error(f"获取数据统计失败: {e}")
+        return JSONResponse(status_code=500, content={"error": f"获取统计失败: {e}"})
+
 @app.get("/api/stats/knowledge-graph")
 async def get_knowledge_graph():
     """获取知识图谱数据 - 简化版，只显示飞机型号、事故类型、制造商"""

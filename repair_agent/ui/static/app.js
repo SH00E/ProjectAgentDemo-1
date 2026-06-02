@@ -1353,6 +1353,15 @@ async function deleteCase(caseId) {
 function initStats() {
     elements.btnRefreshStats.addEventListener('click', refreshStats);
     initVizTabs();
+    
+    // 数据统计看板
+    const btnRefreshDataStats = document.getElementById('btn-refresh-data-stats');
+    if (btnRefreshDataStats) {
+        btnRefreshDataStats.addEventListener('click', loadDataStats);
+    }
+    
+    // 初始加载数据统计
+    loadDataStats();
 }
 
 async function refreshStats() {
@@ -3187,4 +3196,94 @@ function showCaseDetail(caseData) {
     }
     
     openDetailModal(title, html);
+}
+
+// ==================== 数据统计看板 ====================
+
+async function loadDataStats() {
+    try {
+        const response = await fetch('/api/data-stats');
+        const data = await response.json();
+
+        if (data.success) {
+            const stats = data.data;
+
+            // 更新数字卡片
+            document.getElementById('data-total-cases').textContent = stats.summary.total_cases;
+            document.getElementById('data-repair-cases').textContent = stats.summary.repair_cases;
+            document.getElementById('data-maintenance-cases').textContent = stats.summary.maintenance_cases;
+            document.getElementById('data-feedback-count').textContent = stats.summary.feedback_count;
+
+            // 渲染设备类型分布
+            renderBarChart('device-distribution-chart', stats.device_distribution, 'default');
+
+            // 渲染故障类型分布
+            renderBarChart('fault-distribution-chart', stats.fault_distribution, 'default');
+
+            // 渲染维护类型分布
+            renderBarChart('maintenance-distribution-chart', stats.maintenance_distribution, 'maintenance');
+
+            // 渲染最近案例
+            renderRecentCases(stats.recent_cases);
+        }
+    } catch (e) {
+        console.error('加载数据统计失败:', e);
+    }
+}
+
+function renderBarChart(containerId, data, colorType) {
+    const container = document.getElementById(containerId);
+    if (!container || !data || data.length === 0) {
+        if (container) {
+            container.innerHTML = '<div style="text-align: center; color: #94a3b8; padding: 20px;">暂无数据</div>';
+        }
+        return;
+    }
+
+    const maxCount = Math.max(...data.map(d => d.count));
+    let html = '';
+
+    data.forEach(item => {
+        const width = maxCount > 0 ? (item.count / maxCount * 100) : 0;
+        const barClass = colorType === 'maintenance' ? 'maintenance' : '';
+        html += `
+            <div class="chart-bar-item">
+                <span class="chart-bar-label" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span>
+                <div class="chart-bar-wrapper">
+                    <div class="chart-bar-fill ${barClass}" style="width: ${width}%"></div>
+                </div>
+                <span class="chart-bar-count">${item.count}</span>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+function renderRecentCases(cases) {
+    const container = document.getElementById('recent-cases-list');
+    if (!container || !cases || cases.length === 0) {
+        if (container) {
+            container.innerHTML = '<div style="text-align: center; color: #94a3b8; padding: 20px;">暂无案例</div>';
+        }
+        return;
+    }
+
+    let html = '';
+    cases.forEach(c => {
+        const typeLabel = c.case_type === 'repair' ? '维修' : '维护';
+        const typeClass = c.case_type === 'repair' ? 'repair' : 'maintenance';
+        const time = c.created_at ? c.created_at.substring(0, 16) : '';
+
+        html += `
+            <div class="recent-case-item">
+                <span class="recent-case-type ${typeClass}">${typeLabel}</span>
+                <span class="recent-case-title">${escapeHtml(c.title)}</span>
+                <span class="recent-case-device">${escapeHtml(c.device_type)}</span>
+                <span class="recent-case-time">${time}</span>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
 }

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>保障智能助手</title>
-    <link rel="stylesheet" href="/static/style.css?v=20260606">
+    <link rel="stylesheet" href="/static/style.css?v=20260607">
     <script src="/static/d3.min.js"></script>
 </head>
 <body>
@@ -441,6 +441,69 @@
             <div id="components-list" class="components-grid">
                 <!-- 由 JS 动态填充 -->
             </div>
+        </div>
+
+        <!-- 数据统计看板 -->
+        <div class="data-stats-section">
+            <h3>📊 数据资产看板</h3>
+            <div class="data-stats-grid">
+                <!-- 案例总数卡片 -->
+                <div class="data-stat-card">
+                    <div class="data-stat-header">📝 案例统计</div>
+                    <div class="data-stat-numbers">
+                        <div class="data-stat-num">
+                            <span class="num" id="data-total-cases">--</span>
+                            <span class="label">总案例</span>
+                        </div>
+                        <div class="data-stat-num repair">
+                            <span class="num" id="data-repair-cases">--</span>
+                            <span class="label">维修案例</span>
+                        </div>
+                        <div class="data-stat-num maintenance">
+                            <span class="num" id="data-maintenance-cases">--</span>
+                            <span class="label">维护案例</span>
+                        </div>
+                        <div class="data-stat-num feedback">
+                            <span class="num" id="data-feedback-count">--</span>
+                            <span class="label">用户反馈</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 设备类型分布 -->
+                <div class="data-stat-card">
+                    <div class="data-stat-header">🛩️ 设备类型分布</div>
+                    <div id="device-distribution-chart" class="chart-container">
+                        <div class="loading-placeholder"><span class="loading-icon">⏳</span></div>
+                    </div>
+                </div>
+                
+                <!-- 故障类型分布 -->
+                <div class="data-stat-card">
+                    <div class="data-stat-header">⚠️ 故障类型分布</div>
+                    <div id="fault-distribution-chart" class="chart-container">
+                        <div class="loading-placeholder"><span class="loading-icon">⏳</span></div>
+                    </div>
+                </div>
+                
+                <!-- 维护类型分布 -->
+                <div class="data-stat-card">
+                    <div class="data-stat-header">🔧 维护类型分布</div>
+                    <div id="maintenance-distribution-chart" class="chart-container">
+                        <div class="loading-placeholder"><span class="loading-icon">⏳</span></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 最近案例 -->
+            <div class="recent-cases-section">
+                <h4>📋 最近添加的案例</h4>
+                <div id="recent-cases-list" class="recent-cases-list">
+                    <div class="loading-placeholder"><span class="loading-icon">⏳</span></div>
+                </div>
+            </div>
+            
+            <button id="btn-refresh-data-stats" class="btn btn-outline" style="margin-top: 16px;">🔄 刷新数据</button>
         </div>
 
         <!-- 知识图谱可视化 -->
