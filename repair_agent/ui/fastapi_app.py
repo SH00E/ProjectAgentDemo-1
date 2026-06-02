@@ -574,7 +574,7 @@ async def search_knowledge(request: Request):
                 if case_type == "maintenance":
                     content = f"{row['title']} | 设备: {row['device_type']} | 维护类型: {row['maintenance_type'] if 'maintenance_type' in row.keys() else ''} | 周期: {row['maintenance_cycle'] if 'maintenance_cycle' in row.keys() else ''} | 方案: {row['solution']}"
                 else:
-                    content = f"{row['title']} | 设备: {row['device_type']} | 故障: {row['fault_symptom']} | 原因: {row['fault_cause']} | 方案: {row['solution']}"
+                    content = f"{row['title']} | 设备: {row['device_type']} | 故障: {row['fault_symptom'] or ''} | 原因: {row['fault_cause'] or ''} | 方案: {row['solution']}"
                 
                 keyword_results[rid] = {
                     "content": content,
@@ -584,9 +584,9 @@ async def search_knowledge(request: Request):
                     "record_id": rid,
                     "aircraft_model": row["device_type"],
                     "manufacturer": "",
-                    "description": row["fault_symptom"] if case_type == "repair" else (row["maintenance_type"] if "maintenance_type" in row.keys() else ""),
-                    "problem": row["fault_cause"] if case_type == "repair" else (row["maintenance_cycle"] if "maintenance_cycle" in row.keys() else ""),
-                    "action": row["solution"],
+                    "description": (row["fault_symptom"] if case_type == "repair" else (row["maintenance_type"] if "maintenance_type" in row.keys() else "")) or "",
+                    "problem": (row["fault_cause"] if case_type == "repair" else (row["maintenance_cycle"] if "maintenance_cycle" in row.keys() else "")) or "",
+                    "action": row["solution"] or "",
                     "case_type": case_type
                 }
             logger.info(f"关键词搜索 SQLite: 找到 {len(rows)} 条")

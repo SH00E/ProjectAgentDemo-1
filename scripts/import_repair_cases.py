@@ -157,7 +157,7 @@ def sync_to_qdrant(case_id: int, case_data: dict):
                         "text": search_text,
                         "aircraft_model": case_data.get("device_type", ""),
                         "description": case_data.get("fault_symptom", ""),
-                        "problem": case_data.get("fault_symptom", ""),
+                        "problem": case_data.get("fault_cause", ""),
                         "action": case_data.get("solution", ""),
                         "memory_type": "rag_chunk",
                         "memory_id": f"case_{case_id}",

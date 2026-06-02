@@ -200,7 +200,7 @@ class RepairDiagnosisEngine:
                         if case_type == "maintenance":
                             content = f"{row['title']} | 设备: {row['device_type']} | 维护类型: {row['maintenance_type'] if 'maintenance_type' in row.keys() else ''} | 方案: {row['solution']}"
                         else:
-                            content = f"{row['title']} | 设备: {row['device_type']} | 故障: {row['fault_symptom']} | 原因: {row['fault_cause']} | 方案: {row['solution']}"
+                            content = f"{row['title']} | 设备: {row['device_type']} | 故障: {row['fault_symptom'] or ''} | 原因: {row['fault_cause'] or ''} | 方案: {row['solution']}"
                         
                         keyword_results[rid] = {
                             "content": content,
@@ -210,9 +210,9 @@ class RepairDiagnosisEngine:
                             "record_id": rid,
                             "aircraft_model": row["device_type"],
                             "manufacturer": "",
-                            "description": row["fault_symptom"] if case_type == "repair" else (row["maintenance_type"] if "maintenance_type" in row.keys() else ""),
-                            "problem": row["fault_cause"] if case_type == "repair" else (row["maintenance_cycle"] if "maintenance_cycle" in row.keys() else ""),
-                            "action": row["solution"]
+                            "description": (row["fault_symptom"] if case_type == "repair" else (row["maintenance_type"] if "maintenance_type" in row.keys() else "")) or "",
+                            "problem": (row["fault_cause"] if case_type == "repair" else (row["maintenance_cycle"] if "maintenance_cycle" in row.keys() else "")) or "",
+                            "action": row["solution"] or ""
                         }
             except Exception as e:
                 logger.warning(f"SQLite 关键词搜索失败: {e}")
@@ -418,32 +418,37 @@ class RepairDiagnosisEngine:
             List[str]: 关键词列表
         """
         try:
-            prompt = f"""请从以下故障描述中提取关键词，用于知识图谱查询。
-            
+            prompt = f"""请从以下故障描述中智能提取关键词，用于知识图谱查询。
+
 【故障描述】
 {description}
 
-请提取以下类型的关键词（每类1-3个，用逗号分隔）：
-1. 飞机型号（如 CESSNA, BELL, BOEING 等）
-2. 制造商名称
-3. 故障类型或现象（如 engine failure, landing gear 等）
-4. 相关部件名称
+请根据描述内容灵活提取以下类型的关键词（每类1-3个，用逗号分隔）：
+1. 装备型号/名称（如飞机型号、导弹型号、车辆型号等）
+2. 制造商/研制单位名称
+3. 故障类型或现象（如信号丢失、推力下降、液压泄漏等）
+4. 相关部件/系统名称（如制导系统、发动机、雷达等）
+
+注意：
+- 只提取描述中明确提到的关键词，不要猜测
+- 如果某类关键词在描述中没有提及，则跳过该类
+- 关键词用中文表示
 
 只返回关键词，用逗号分隔，不要其他内容。"""
 
             messages = [
-                {"role": "system", "content": "你是一个关键词提取助手。"},
+                {"role": "system", "content": "你是一个专业的装备维修关键词提取助手，擅长从故障描述中提取装备型号、故障现象、部件名称等关键信息。"},
                 {"role": "user", "content": prompt}
             ]
             
             response = self.llm.invoke(messages)
-            keywords = [kw.strip() for kw in response.split(",") if kw.strip()]
-            return keywords[:10]  # 最多10个关键词
+            keywords = [kw.strip() for kw in response.split(",") if kw.strip() and kw.strip() != "无"]
+            return keywords[:10] if keywords else ["故障诊断"]  # 最多10个关键词，至少返回一个
             
         except Exception as e:
             logger.warning(f"⚠️ 关键词提取失败: {e}")
-            # 简单分词作为备选
-            return description.split()[:5]
+            # 简单分词作为备选，过滤掉过短的词
+            return [w for w in description.split() if len(w) > 1][:5] or ["故障诊断"]
     
     def _store_image_memory(self, image_path: str, description: str):
         """存储照片到感知记忆"""
@@ -695,16 +700,25 @@ class RepairDiagnosisEngine:
 【已提取关键词】
 {', '.join(original_keywords)}
 
-请提供相关的上位概念或同义词（如 "CESSNA" -> "aircraft", "engine failure" -> "engine"）。
+请提供相关的上位概念或同义词，例如：
+- 具体型号 -> 装备类型（如"鹰击-83" -> "导弹"）
+- 具体部件 -> 系统名称（如"陀螺仪" -> "惯性导航系统"）
+- 具体故障 -> 故障类型（如"信号丢失" -> "通信故障"）
+
+注意：
+- 关键词用中文表示
+- 只返回与原始关键词不同的新关键词
+- 不要重复已有的关键词
+
 只返回关键词，用逗号分隔，不要其他内容。"""
 
             messages = [
-                {"role": "system", "content": "你是一个关键词扩展助手。"},
+                {"role": "system", "content": "你是一个装备维修关键词扩展助手，擅长提供上位概念和同义词。"},
                 {"role": "user", "content": prompt}
             ]
             
             response = self.llm.invoke(messages)
-            keywords = [kw.strip() for kw in response.split(",") if kw.strip()]
+            keywords = [kw.strip() for kw in response.split(",") if kw.strip() and kw.strip() != "无"]
             # 过滤掉已有的关键词
             new_keywords = [kw for kw in keywords if kw not in original_keywords]
             return new_keywords[:5]
