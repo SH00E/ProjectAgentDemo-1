@@ -75,15 +75,23 @@ h2 {
 
 .header-content h1 {
     margin-bottom: 4px;
+}
+
+.header-content {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 16px;
 }
 
 .header-logo {
-    width: 36px;
-    height: 36px;
+    width: 48px;
+    height: 48px;
     object-fit: contain;
+}
+
+.header-text {
+    display: flex;
+    flex-direction: column;
 }
 
 .subtitle {
