@@ -1430,6 +1430,25 @@ async def get_feedbacks(limit: int = 50):
         logger.error(f"获取反馈失败: {e}")
         return JSONResponse(status_code=500, content={"error": f"获取失败: {e}"})
 
+@app.delete("/api/feedback/{feedback_id}")
+async def delete_feedback(feedback_id: int):
+    """删除反馈"""
+    try:
+        conn = sqlite3.connect(FEEDBACK_DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM feedback WHERE id = ?", (feedback_id,))
+        deleted = cursor.rowcount > 0
+        conn.commit()
+        conn.close()
+        
+        if deleted:
+            return {"success": True, "message": f"反馈 {feedback_id} 已删除"}
+        else:
+            return JSONResponse(status_code=404, content={"error": "反馈不存在"})
+    except Exception as e:
+        logger.error(f"删除反馈失败: {e}")
+        return JSONResponse(status_code=500, content={"error": f"删除失败: {e}"})
+
 # ==================== 启动事件 ====================
 
 @app.on_event("startup")

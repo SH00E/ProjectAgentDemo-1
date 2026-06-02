@@ -2543,6 +2543,20 @@ textarea {
     color: #94a3b8;
 }
 
+.feedback-delete-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 4px;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.feedback-delete-btn:hover {
+    background: #fee2e2;
+}
+
 .feedback-issue {
     font-size: 14px;
     color: #1e293b;

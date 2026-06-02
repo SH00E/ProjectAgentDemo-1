@@ -3008,6 +3008,7 @@ async function loadFeedbacks() {
                         <div class="feedback-header">
                             <span class="feedback-type-badge">${typeLabel}</span>
                             <span class="feedback-time">${f.created_at || ''}</span>
+                            <button class="feedback-delete-btn" onclick="deleteFeedback(${f.id})" title="删除反馈">🗑️</button>
                         </div>
                         <div class="feedback-issue">${escapeHtml(f.issue_description)}</div>
                         ${f.correct_answer ? `<div class="feedback-correct">✅ 正确答案: ${escapeHtml(f.correct_answer)}</div>` : ''}
@@ -3025,6 +3026,26 @@ async function loadFeedbacks() {
         }
     } catch (e) {
         console.error('加载反馈失败:', e);
+    }
+}
+
+async function deleteFeedback(feedbackId) {
+    if (!confirm('确定要删除这条反馈吗？')) return;
+
+    try {
+        const response = await fetch(`/api/feedback/${feedbackId}`, {
+            method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            loadFeedbacks();
+        } else {
+            alert(`删除失败: ${data.error || '未知错误'}`);
+        }
+    } catch (e) {
+        alert(`删除失败: ${e.message}`);
     }
 }
 
