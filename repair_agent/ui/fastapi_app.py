@@ -462,8 +462,8 @@ async def search_knowledge(request: Request):
 
     body = await request.json()
     query = body.get("query", "").strip()
-    page = body.get("page", 1)
-    page_size = body.get("page_size", 20)
+    page = int(body.get("page", 1))
+    page_size = int(body.get("page_size", 20))
     
     if not query:
         return JSONResponse(status_code=400, content={"error": "请输入查询内容"})
@@ -651,8 +651,13 @@ async def search_knowledge(request: Request):
         # 关键词结果排在前面
         all_results = {**keyword_results, **vector_results}
         
+        # 确保score是数字类型
+        for r in all_results.values():
+            if not isinstance(r.get("score"), (int, float)):
+                r["score"] = 0.5
+        
         # 按分数排序（关键词结果分数高，会排在前面）
-        sorted_results = sorted(all_results.values(), key=lambda x: x["score"], reverse=True)
+        sorted_results = sorted(all_results.values(), key=lambda x: x.get("score", 0), reverse=True)
         
         # 计算分页
         total = len(sorted_results)
