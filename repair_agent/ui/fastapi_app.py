@@ -1080,6 +1080,230 @@ async def get_vector_space():
         logger.error(f"获取向量空间失败: {e}")
         return JSONResponse(status_code=500, content={"error": f"获取向量空间失败: {e}"})
 
+# ==================== 智能问答 API ====================
+
+@app.post("/api/ask")
+async def ask_question(request: Request):
+    """智能问答 - 递归关键词解释"""
+    if agent_state["agent"] is None:
+        return JSONResponse(status_code=503, content={"error": "系统未就绪"})
+
+    body = await request.json()
+    question = body.get("question", "").strip()
+    if not question:
+        return JSONResponse(status_code=400, content={"error": "请输入问题"})
+
+    try:
+        llm = agent_state["agent"].llm
+        
+        # 第一步：分析问题，提取关键词
+        analysis_prompt = f"""请分析以下问题，提取3-5个核心关键词或概念，并简要说明每个关键词与问题的关系。
+
+问题：{question}
+
+请以JSON格式返回：
+{{
+    "keywords": [
+        {{"keyword": "关键词1", "relation": "与问题的关系"}},
+        {{"keyword": "关键词2", "relation": "与问题的关系"}}
+    ]
+}}"""
+
+        analysis_messages = [
+            {"role": "system", "content": "你是一个专业知识分析师，擅长提取和解释专业概念。"},
+            {"role": "user", "content": analysis_prompt}
+        ]
+        
+        analysis_result = llm.invoke(analysis_messages)
+        
+        # 解析关键词
+        try:
+            import json
+            # 尝试从响应中提取JSON
+            if "```json" in analysis_result:
+                json_str = analysis_result.split("```json")[1].split("```")[0]
+            elif "```" in analysis_result:
+                json_str = analysis_result.split("```")[1].split("```")[0]
+            else:
+                json_str = analysis_result
+            
+            keywords_data = json.loads(json_str.strip())
+            keywords = keywords_data.get("keywords", [])
+        except Exception as e:
+            logger.warning(f"解析关键词失败: {e}")
+            keywords = [{"keyword": question[:20], "relation": "核心问题"}]
+        
+        # 第二步：解释每个关键词
+        keyword_explanations = []
+        for kw in keywords[:5]:  # 最多处理5个关键词
+            keyword = kw.get("keyword", "")
+            if not keyword:
+                continue
+            
+            explain_prompt = f"""请用简洁的语言解释以下专业概念（100-200字）：
+
+概念：{keyword}
+
+要求：
+1. 用通俗易懂的语言解释
+2. 如果涉及专业术语，需要进一步解释
+3. 可以用类比帮助理解"""
+
+            explain_messages = [
+                {"role": "system", "content": "你是一个专业的技术教育专家，擅长用通俗语言解释复杂概念。"},
+                {"role": "user", "content": explain_prompt}
+            ]
+            
+            explanation = llm.invoke(explain_messages)
+            keyword_explanations.append({
+                "keyword": keyword,
+                "relation": kw.get("relation", ""),
+                "explanation": explanation
+            })
+        
+        # 第三步：综合回答原始问题
+        synthesis_prompt = f"""请根据以下信息，综合回答用户的问题。
+
+问题：{question}
+
+关键词解析：
+{chr(10).join(f'- {ke["keyword"]}: {ke["explanation"][:100]}...' for ke in keyword_explanations)}
+
+请用简洁清晰的语言回答问题（200-400字），并确保：
+1. 直接回答问题
+2. 结合关键词的解释
+3. 逻辑清晰，易于理解"""
+
+        synthesis_messages = [
+            {"role": "system", "content": "你是一个专业的技术顾问，擅长综合分析和解答复杂问题。"},
+            {"role": "user", "content": synthesis_prompt}
+        ]
+        
+        final_answer = ""
+        for chunk in llm.stream_invoke(synthesis_messages):
+            final_answer += chunk
+        
+        return {
+            "success": True,
+            "question": question,
+            "keywords": keyword_explanations,
+            "answer": final_answer
+        }
+        
+    except Exception as e:
+        logger.error(f"智能问答失败: {e}")
+        return JSONResponse(status_code=500, content={"error": f"问答失败: {e}"})
+
+# ==================== 系统反馈 API ====================
+
+FEEDBACK_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "memory_data", "feedback.db")
+
+def init_feedback_db():
+    """初始化反馈数据库"""
+    os.makedirs(os.path.dirname(FEEDBACK_DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(FEEDBACK_DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            feedback_type TEXT NOT NULL,
+            context TEXT,
+            system_output TEXT,
+            issue_description TEXT,
+            correct_answer TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            processed INTEGER DEFAULT 0
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+# 初始化反馈数据库
+init_feedback_db()
+
+@app.post("/api/feedback")
+async def submit_feedback(request: Request):
+    """提交系统反馈"""
+    body = await request.json()
+    
+    feedback_type = body.get("feedback_type", "other")
+    context = body.get("context", "").strip()
+    system_output = body.get("system_output", "").strip()
+    issue_description = body.get("issue_description", "").strip()
+    correct_answer = body.get("correct_answer", "").strip()
+    
+    if not issue_description:
+        return JSONResponse(status_code=400, content={"error": "请描述问题"})
+    
+    try:
+        conn = sqlite3.connect(FEEDBACK_DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO feedback (feedback_type, context, system_output, issue_description, correct_answer)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (feedback_type, context, system_output, issue_description, correct_answer))
+        feedback_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        # 同时记录到记忆系统
+        try:
+            agent = agent_state["agent"]
+            if agent:
+                memory_content = f"用户反馈 [{feedback_type}] | 问题: {issue_description[:100]}"
+                if correct_answer:
+                    memory_content += f" | 正确答案: {correct_answer[:100]}"
+                
+                agent.memory_tool.run({
+                    "action": "add",
+                    "content": memory_content,
+                    "memory_type": "episodic",
+                    "importance": 0.9,
+                    "topic": "user_feedback",
+                    "metadata": {
+                        "feedback_id": feedback_id,
+                        "feedback_type": feedback_type,
+                        "context": context[:200],
+                        "issue": issue_description[:200]
+                    }
+                })
+        except Exception as e:
+            logger.warning(f"记录反馈到记忆系统失败: {e}")
+        
+        return {"success": True, "message": "感谢您的反馈！", "feedback_id": feedback_id}
+    except Exception as e:
+        logger.error(f"保存反馈失败: {e}")
+        return JSONResponse(status_code=500, content={"error": f"提交失败: {e}"})
+
+@app.get("/api/feedbacks")
+async def get_feedbacks(limit: int = 50):
+    """获取反馈列表"""
+    try:
+        conn = sqlite3.connect(FEEDBACK_DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM feedback ORDER BY created_at DESC LIMIT ?', (limit,))
+        rows = cursor.fetchall()
+        conn.close()
+        
+        feedbacks = []
+        for row in rows:
+            feedbacks.append({
+                "id": row["id"],
+                "feedback_type": row["feedback_type"],
+                "context": row["context"],
+                "system_output": row["system_output"],
+                "issue_description": row["issue_description"],
+                "correct_answer": row["correct_answer"],
+                "created_at": row["created_at"],
+                "processed": row["processed"]
+            })
+        
+        return {"success": True, "feedbacks": feedbacks}
+    except Exception as e:
+        logger.error(f"获取反馈失败: {e}")
+        return JSONResponse(status_code=500, content={"error": f"获取失败: {e}"})
+
 # ==================== 启动事件 ====================
 
 @app.on_event("startup")

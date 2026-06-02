@@ -648,7 +648,7 @@ class RepairDiagnosisEngine:
         # 流式输出分析过程
         analysis_prompt = self._build_analysis_prompt(description, all_evidence, image_analysis)
         messages = [
-            {"role": "system", "content": "你是一个专业的航空维修诊断专家。"},
+            {"role": "system", "content": "你是一个专业的装备保障诊断专家，精通飞机、导弹等装备的故障诊断。"},
             {"role": "user", "content": analysis_prompt}
         ]
         
@@ -823,24 +823,24 @@ class RepairDiagnosisEngine:
             causes = diagnosis_result.get("possible_causes", [])
             recommended = diagnosis_result.get("recommended_actions", [])
             
-            solution_prompt = f"""你是一个专业的航空维修工程师。请根据以下诊断结果，提供详细的维修方案。
+            solution_prompt = f"""你是一个专业的装备保障工程师。请根据以下诊断结果，提供详细的维修方案。
 
 【故障类型】{fault_type}
 【可能原因】{', '.join(causes)}
 【建议操作】{', '.join(recommended)}
 
 请按以下格式输出：
-1. 维修步骤（按顺序列出，参考AMM手册）
+1. 维修步骤（按顺序列出，参考技术手册）
 2. 所需工具
 3. 所需备件（含件号，如有）
 4. 安全注意事项
 5. 预计维修时间和难度
-6. 是否需要适航批准
+6. 是否需要特殊批准
 
 请用简洁的中文回答。"""
 
         messages = [
-            {"role": "system", "content": "你是一个专业的航空维修工程师。"},
+            {"role": "system", "content": "你是一个专业的装备保障工程师。"},
             {"role": "user", "content": solution_prompt}
         ]
         
@@ -991,7 +991,7 @@ class RepairDiagnosisEngine:
             causes = diagnosis_result.get("possible_causes", [])
             recommended = diagnosis_result.get("recommended_actions", [])
             
-            system_prompt = "你是一个专业的航空维修工程师。请根据诊断结果提供详细的维修方案。只返回JSON格式。"
+            system_prompt = "你是一个专业的装备保障工程师。请根据诊断结果提供详细的维修方案。只返回JSON格式。"
             
             user_prompt = f"""请根据以下诊断结果，提供详细的维修方案。
 

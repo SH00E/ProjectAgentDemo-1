@@ -65,7 +65,22 @@ const elements = {
     statDiagnosisCount: document.getElementById('stat-diagnosis-count'),
     statRunStatus: document.getElementById('stat-run-status'),
     statSessionId: document.getElementById('stat-session-id'),
-    componentsList: document.getElementById('components-list')
+    componentsList: document.getElementById('components-list'),
+
+    // 智能问答
+    qaQuestion: document.getElementById('qa-question'),
+    btnAsk: document.getElementById('btn-ask'),
+    qaAnswer: document.getElementById('qa-answer'),
+
+    // 系统反馈
+    feedbackType: document.getElementById('feedback-type'),
+    feedbackContext: document.getElementById('feedback-context'),
+    feedbackOutput: document.getElementById('feedback-output'),
+    feedbackIssue: document.getElementById('feedback-issue'),
+    feedbackCorrect: document.getElementById('feedback-correct'),
+    btnSubmitFeedback: document.getElementById('btn-submit-feedback'),
+    feedbackResult: document.getElementById('feedback-result'),
+    feedbackList: document.getElementById('feedback-list')
 };
 
 // ==================== 初始化 ====================
@@ -74,8 +89,10 @@ document.addEventListener('DOMContentLoaded', () => {
     initTabs();
     initDiagnosis();
     initMaintenance();
+    initQA();
     initSearch();
     initCase();
+    initFeedback();
     initStats();
     checkStatus();
     loadSearchHistory();
@@ -2613,4 +2630,219 @@ function scrollToMaintBottom() {
     requestAnimationFrame(() => {
         elements.maintCotArea.scrollTop = elements.maintCotArea.scrollHeight;
     });
+}
+
+// ==================== 智能问答 ====================
+
+const qaState = {
+    isProcessing: false
+};
+
+function initQA() {
+    // 提问按钮
+    if (elements.btnAsk) {
+        elements.btnAsk.addEventListener('click', askQuestion);
+    }
+
+    // 输入框
+    if (elements.qaQuestion) {
+        elements.qaQuestion.addEventListener('input', () => {
+            elements.btnAsk.disabled = !elements.qaQuestion.value.trim();
+        });
+
+        // Ctrl+Enter 快捷键
+        elements.qaQuestion.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Enter') {
+                e.preventDefault();
+                if (!elements.btnAsk.disabled) {
+                    askQuestion();
+                }
+            }
+        });
+    }
+
+    // 示例问题点击
+    document.querySelectorAll('.qa-example').forEach(example => {
+        example.addEventListener('click', () => {
+            elements.qaQuestion.value = example.dataset.question;
+            elements.btnAsk.disabled = false;
+            askQuestion();
+        });
+    });
+}
+
+async function askQuestion() {
+    if (qaState.isProcessing) return;
+
+    const question = elements.qaQuestion.value.trim();
+    if (!question) {
+        alert('请输入问题');
+        return;
+    }
+
+    qaState.isProcessing = true;
+    elements.btnAsk.disabled = true;
+    elements.btnAsk.textContent = '⏳ 思考中...';
+    elements.qaAnswer.innerHTML = '<div class="qa-loading"><span class="loading-icon">🧠</span><p>正在分析问题...</p></div>';
+
+    try {
+        const response = await fetch('/api/ask', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            let html = '';
+            
+            // 关键词解析
+            if (data.keywords && data.keywords.length > 0) {
+                html += '<div class="qa-section">';
+                html += '<h3>🔑 关键词解析</h3>';
+                data.keywords.forEach((kw, i) => {
+                    html += `
+                        <div class="qa-keyword-item">
+                            <div class="qa-keyword-title">
+                                <span class="qa-keyword-num">${i + 1}</span>
+                                <span class="qa-keyword-name">${escapeHtml(kw.keyword)}</span>
+                                <span class="qa-keyword-relation">${escapeHtml(kw.relation)}</span>
+                            </div>
+                            <div class="qa-keyword-explanation">${escapeHtml(kw.explanation)}</div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+            }
+            
+            // 综合回答
+            html += '<div class="qa-section">';
+            html += '<h3>📋 综合解答</h3>';
+            html += `<div class="qa-answer-content">${escapeHtml(data.answer).replace(/\n/g, '<br>')}</div>`;
+            html += '</div>';
+            
+            elements.qaAnswer.innerHTML = html;
+        } else {
+            elements.qaAnswer.innerHTML = `<div class="qa-error">❌ ${escapeHtml(data.error || '回答失败')}</div>`;
+        }
+    } catch (e) {
+        elements.qaAnswer.innerHTML = `<div class="qa-error">❌ 请求失败: ${e.message}</div>`;
+    } finally {
+        qaState.isProcessing = false;
+        elements.btnAsk.disabled = false;
+        elements.btnAsk.textContent = '💡 提问';
+    }
+}
+
+// ==================== 系统反馈 ====================
+
+function initFeedback() {
+    // 提交反馈按钮
+    if (elements.btnSubmitFeedback) {
+        elements.btnSubmitFeedback.addEventListener('click', submitFeedback);
+    }
+
+    // 加载反馈历史
+    loadFeedbacks();
+}
+
+async function submitFeedback() {
+    const feedbackType = elements.feedbackType.value;
+    const context = elements.feedbackContext.value.trim();
+    const systemOutput = elements.feedbackOutput.value.trim();
+    const issueDescription = elements.feedbackIssue.value.trim();
+    const correctAnswer = elements.feedbackCorrect.value.trim();
+
+    if (!issueDescription) {
+        alert('请描述问题');
+        return;
+    }
+
+    elements.btnSubmitFeedback.disabled = true;
+    elements.btnSubmitFeedback.textContent = '📤 提交中...';
+    elements.feedbackResult.textContent = '';
+    elements.feedbackResult.className = 'result-message';
+
+    try {
+        const response = await fetch('/api/feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                feedback_type: feedbackType,
+                context: context,
+                system_output: systemOutput,
+                issue_description: issueDescription,
+                correct_answer: correctAnswer
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            elements.feedbackResult.textContent = '✅ 感谢您的反馈！';
+            elements.feedbackResult.className = 'result-message success';
+            
+            // 清空表单
+            elements.feedbackContext.value = '';
+            elements.feedbackOutput.value = '';
+            elements.feedbackIssue.value = '';
+            elements.feedbackCorrect.value = '';
+            
+            // 重新加载反馈列表
+            loadFeedbacks();
+        } else {
+            elements.feedbackResult.textContent = `❌ ${data.error || '提交失败'}`;
+            elements.feedbackResult.className = 'result-message error';
+        }
+    } catch (e) {
+        elements.feedbackResult.textContent = `❌ 提交失败: ${e.message}`;
+        elements.feedbackResult.className = 'result-message error';
+    } finally {
+        elements.btnSubmitFeedback.disabled = false;
+        elements.btnSubmitFeedback.textContent = '📤 提交反馈';
+    }
+}
+
+async function loadFeedbacks() {
+    if (!elements.feedbackList) return;
+
+    try {
+        const response = await fetch('/api/feedbacks');
+        const data = await response.json();
+
+        if (data.success && data.feedbacks && data.feedbacks.length > 0) {
+            let html = '';
+            data.feedbacks.forEach(f => {
+                const typeLabel = {
+                    'diagnosis': '🔍 故障诊断',
+                    'maintenance': '🔧 日常维护',
+                    'qa': '💡 智能问答',
+                    'search': '📚 知识检索',
+                    'other': '📝 其他'
+                }[f.feedback_type] || '📝 其他';
+
+                html += `
+                    <div class="feedback-item">
+                        <div class="feedback-header">
+                            <span class="feedback-type-badge">${typeLabel}</span>
+                            <span class="feedback-time">${f.created_at || ''}</span>
+                        </div>
+                        <div class="feedback-issue">${escapeHtml(f.issue_description)}</div>
+                        ${f.correct_answer ? `<div class="feedback-correct">✅ 正确答案: ${escapeHtml(f.correct_answer)}</div>` : ''}
+                    </div>
+                `;
+            });
+            elements.feedbackList.innerHTML = html;
+        } else {
+            elements.feedbackList.innerHTML = `
+                <div class="loading-placeholder">
+                    <span class="loading-icon">📭</span>
+                    <p>暂无反馈记录</p>
+                </div>
+            `;
+        }
+    } catch (e) {
+        console.error('加载反馈失败:', e);
+    }
 }

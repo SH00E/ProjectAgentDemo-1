@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>保障智能助手</title>
-    <link rel="stylesheet" href="/static/style.css?v=20260604">
+    <link rel="stylesheet" href="/static/style.css?v=20260605">
     <script src="/static/d3.min.js"></script>
 </head>
 <body>
@@ -23,8 +23,10 @@
     <nav class="tabs">
         <button class="tab active" data-tab="diagnosis">🔍 故障诊断</button>
         <button class="tab" data-tab="maintenance">🔧 日常维护</button>
+        <button class="tab" data-tab="qa">💡 智能问答</button>
         <button class="tab" data-tab="search">📚 知识检索</button>
         <button class="tab" data-tab="case">📝 案例管理</button>
+        <button class="tab" data-tab="feedback">📮 系统反馈</button>
         <button class="tab" data-tab="stats">📊 系统统计</button>
     </nav>
 
@@ -36,7 +38,7 @@
                 <h2>📝 输入</h2>
                 <div class="form-group">
                     <label for="fault-desc">故障描述</label>
-                    <textarea id="fault-desc" rows="8" placeholder="例如：CESSNA 172 发动机在起飞后熄火，滑油压力指示异常低..."></textarea>
+                    <textarea id="fault-desc" rows="8" placeholder="例如：某型战机发动机在高空出现推力下降，尾喷口温度异常升高...&#10;或：某型导弹制导系统在测试中出现信号丢失..."></textarea>
                 </div>
                 <div class="form-group">
                     <label for="fault-image">📷 上传照片（可选）</label>
@@ -83,7 +85,7 @@
                 <h2>📝 维护需求</h2>
                 <div class="form-group">
                     <label for="maint-desc">维护描述</label>
-                    <textarea id="maint-desc" rows="8" placeholder="例如：CESSNA 172 需要进行100小时定期检查，包括更换滑油和检查起落架..."></textarea>
+                    <textarea id="maint-desc" rows="8" placeholder="例如：某型战机需要进行200飞行小时定期检查，包括发动机叶片检测和航电系统校准...&#10;或：某型导弹发射车需要进行液压系统维护保养..."></textarea>
                 </div>
                 <div class="form-group">
                     <label for="maint-image">📷 上传照片（可选）</label>
@@ -127,9 +129,9 @@
         <div class="search-layout">
             <!-- 左侧：搜索区域 -->
             <div class="search-main">
-                <h2>📚 检索维修知识库</h2>
+                <h2>📚 检索保障知识库</h2>
                 <div class="search-form">
-                    <input type="text" id="search-query" placeholder="例如：CESSNA 172 发动机熄火原因" />
+                    <input type="text" id="search-query" placeholder="例如：发动机推力下降原因、制导系统故障排除" />
                     <button id="btn-search" class="btn btn-primary">🔍 检索</button>
                 </div>
                 <div id="search-results" class="search-results">
@@ -144,14 +146,14 @@
                 <div class="hot-search">
                     <h3>🔥 热门搜索</h3>
                     <div class="hot-tags">
-                        <span class="hot-tag" data-query="发动机熄火">发动机熄火</span>
-                        <span class="hot-tag" data-query="起落架故障">起落架故障</span>
+                        <span class="hot-tag" data-query="发动机推力下降">发动机推力下降</span>
+                        <span class="hot-tag" data-query="航电系统故障">航电系统故障</span>
                         <span class="hot-tag" data-query="液压系统泄漏">液压系统泄漏</span>
-                        <span class="hot-tag" data-query="滑油温度高">滑油温度高</span>
+                        <span class="hot-tag" data-query="制导系统异常">制导系统异常</span>
                         <span class="hot-tag" data-query="电气故障">电气故障</span>
-                        <span class="hot-tag" data-query="刹车失灵">刹车失灵</span>
-                        <span class="hot-tag" data-query="螺旋桨异响">螺旋桨异响</span>
-                        <span class="hot-tag" data-query="仪表异常">仪表异常</span>
+                        <span class="hot-tag" data-query="起落架故障">起落架故障</span>
+                        <span class="hot-tag" data-query="雷达系统故障">雷达系统故障</span>
+                        <span class="hot-tag" data-query="导弹发射故障">导弹发射故障</span>
                     </div>
                 </div>
                 <div class="search-history">
@@ -164,7 +166,39 @@
         </div>
     </main>
 
-    <!-- Tab 3: 案例管理 -->
+    <!-- Tab 4: 智能问答 -->
+    <main id="tab-qa" class="tab-content">
+        <div class="qa-layout">
+            <!-- 左侧：输入区域 -->
+            <div class="qa-input-panel">
+                <h2>💡 智能问答</h2>
+                <p class="qa-desc">输入专业问题，系统将逐步解析关键词并深入解释</p>
+                <div class="qa-form">
+                    <textarea id="qa-question" rows="4" placeholder="例如：为什么低温下锂离子电池会导致能力下降？&#10;或：惯性导航原理是什么？"></textarea>
+                    <button id="btn-ask" class="btn btn-primary">💡 提问</button>
+                </div>
+                <div class="qa-examples">
+                    <h3>📝 示例问题</h3>
+                    <div class="qa-example-list">
+                        <span class="qa-example" data-question="为什么低温下锂离子电池会导致能力下降">为什么低温下锂离子电池会导致能力下降</span>
+                        <span class="qa-example" data-question="惯性导航原理是什么">惯性导航原理是什么</span>
+                        <span class="qa-example" data-question="雷达相控阵技术原理">雷达相控阵技术原理</span>
+                        <span class="qa-example" data-question="涡轮风扇发动机工作原理">涡轮风扇发动机工作原理</span>
+                        <span class="qa-example" data-question="导弹制导系统有哪些类型">导弹制导系统有哪些类型</span>
+                    </div>
+                </div>
+            </div>
+            <!-- 右侧：回答区域 -->
+            <div class="qa-answer-panel">
+                <h2>📋 解答</h2>
+                <div id="qa-answer" class="qa-answer-box">
+                    <em class="placeholder">输入问题后，系统将逐步解析并解答...</em>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Tab 5: 案例管理 -->
     <main id="tab-case" class="tab-content">
         <div class="case-layout">
             <!-- 左侧：添加案例 -->
@@ -318,7 +352,59 @@
         </div>
     </main>
 
-    <!-- Tab 4: 系统统计 -->
+    <!-- Tab 7: 系统反馈 -->
+    <main id="tab-feedback" class="tab-content">
+        <div class="feedback-layout">
+            <div class="feedback-panel">
+                <h2>📮 系统反馈</h2>
+                <p class="feedback-desc">帮助我们改进系统质量，您的反馈将用于优化大模型输出</p>
+                
+                <div class="feedback-form">
+                    <div class="form-group">
+                        <label for="feedback-type">反馈类型</label>
+                        <select id="feedback-type">
+                            <option value="diagnosis">故障诊断</option>
+                            <option value="maintenance">日常维护</option>
+                            <option value="qa">智能问答</option>
+                            <option value="search">知识检索</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="feedback-context">原始输入/问题</label>
+                        <textarea id="feedback-context" rows="3" placeholder="请输入当时的输入内容或问题..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="feedback-output">系统输出</label>
+                        <textarea id="feedback-output" rows="3" placeholder="请粘贴系统的输出内容..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="feedback-issue">问题描述</label>
+                        <textarea id="feedback-issue" rows="3" placeholder="请描述问题所在，例如：回答不准确、缺少关键信息、逻辑错误等..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="feedback-correct">正确答案（可选）</label>
+                        <textarea id="feedback-correct" rows="3" placeholder="如果您知道正确答案，请提供..."></textarea>
+                    </div>
+                    <button id="btn-submit-feedback" class="btn btn-primary">📤 提交反馈</button>
+                    <div id="feedback-result" class="result-message"></div>
+                </div>
+            </div>
+            
+            <!-- 反馈历史 -->
+            <div class="feedback-history-panel">
+                <h2>📋 反馈历史</h2>
+                <div id="feedback-list" class="feedback-list">
+                    <div class="loading-placeholder">
+                        <span class="loading-icon">📭</span>
+                        <p>暂无反馈记录</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Tab 8: 系统统计 -->
     <main id="tab-stats" class="tab-content">
         <h2>📊 系统运行状态</h2>
         <!-- 状态卡片 -->
