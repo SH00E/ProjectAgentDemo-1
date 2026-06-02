@@ -219,6 +219,15 @@ app = FastAPI(title="保障智能助手")
 static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
+# 本地开发模式禁用静态文件缓存
+@app.middleware("http")
+async def disable_static_cache(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
 # ==================== SSE 流式输出 ====================
 
 def sse_event(event: str, data) -> str:
