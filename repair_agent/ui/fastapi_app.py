@@ -463,8 +463,18 @@ async def search_knowledge(request: Request):
 
     body = await request.json()
     query = body.get("query", "").strip()
-    page = int(body.get("page", 1))
-    page_size = int(body.get("page_size", 20))
+    page = body.get("page", 1)
+    page_size = body.get("page_size", 20)
+    
+    # 确保page和page_size是整数
+    try:
+        page = int(page) if page else 1
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = int(page_size) if page_size else 20
+    except (TypeError, ValueError):
+        page_size = 20
     
     if not query:
         return JSONResponse(status_code=400, content={"error": "请输入查询内容"})
