@@ -107,9 +107,10 @@ class RepairDiagnosisEngine:
             return text
 
     def _retrieve_knowledge(self, query: str) -> List[Dict]:
-        """检索相关知识 - 支持中英文双语搜索"""
+        """检索相关知识 - 混合搜索（关键词 + 向量）"""
         try:
             from qdrant_client import QdrantClient
+            from qdrant_client.models import Filter, FieldCondition, MatchText
             from hello_agents.memory.embedding import get_text_embedder
             
             qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
@@ -120,54 +121,120 @@ class RepairDiagnosisEngine:
             collections = [c.name for c in client.get_collections().collections]
             collection_name = "aviation_knowledge_base" if "aviation_knowledge_base" in collections else "rag_knowledge_base"
             
-            all_results = {}
+            # 分离关键词结果和向量结果
+            keyword_results = {}
+            vector_results = {}
             
-            # 1. 用原始查询搜索
-            vector_cn = embedder.encode(query).tolist()
-            results_cn = client.query_points(
-                collection_name=collection_name,
-                query=vector_cn,
-                limit=5,
-                with_payload=True
-            ).points
-            
-            for r in results_cn:
-                payload = r.payload or {}
-                rid = payload.get("record_id", str(r.id))
-                if rid not in all_results or r.score > all_results[rid]["score"]:
-                    all_results[rid] = {
+            # ==================== 1. 关键词搜索（Qdrant）====================
+            try:
+                keyword_filter = Filter(
+                    should=[
+                        FieldCondition(key="content", match=MatchText(text=query)),
+                        FieldCondition(key="text", match=MatchText(text=query)),
+                        FieldCondition(key="description", match=MatchText(text=query)),
+                        FieldCondition(key="description_zh", match=MatchText(text=query)),
+                        FieldCondition(key="problem", match=MatchText(text=query)),
+                        FieldCondition(key="problem_zh", match=MatchText(text=query)),
+                        FieldCondition(key="action", match=MatchText(text=query)),
+                        FieldCondition(key="action_zh", match=MatchText(text=query)),
+                    ]
+                )
+                
+                keyword_scroll = client.scroll(
+                    collection_name=collection_name,
+                    scroll_filter=keyword_filter,
+                    limit=5,
+                    with_payload=True
+                )
+                
+                for point in keyword_scroll[0]:
+                    payload = point.payload or {}
+                    rid = payload.get("record_id", str(point.id))
+                    keyword_results[rid] = {
                         "content": payload.get("content", payload.get("text", "")),
-                        "score": r.score,
+                        "score": 0.9,
+                        "match_type": "keyword",
                         "source": payload.get("source", "unknown"),
                         "record_id": rid,
                         "aircraft_model": payload.get("aircraft_model", ""),
                         "manufacturer": payload.get("manufacturer", ""),
-                        "description": payload.get("description", ""),
-                        "problem": payload.get("problem", ""),
-                        "action": payload.get("action", "")
+                        "description": payload.get("description", "") or payload.get("description_zh", ""),
+                        "problem": payload.get("problem", "") or payload.get("problem_zh", ""),
+                        "action": payload.get("action", "") or payload.get("action_zh", "")
                     }
+            except Exception as e:
+                logger.warning(f"Qdrant 关键词搜索失败: {e}")
             
-            # 2. 如果是中文，翻译后再次搜索
-            has_chinese = any('\u4e00' <= c <= '\u9fff' for c in query)
-            if has_chinese:
-                query_en = self._translate_to_english(query)
-                logger.info(f"📝 翻译查询: {query} -> {query_en}")
-                
-                vector_en = embedder.encode(query_en).tolist()
-                results_en = client.query_points(
+            # ==================== 1.5 关键词搜索（SQLite）====================
+            try:
+                import sqlite3
+                cases_db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "memory_data", "cases.db")
+                if os.path.exists(cases_db_path):
+                    conn = sqlite3.connect(cases_db_path)
+                    conn.row_factory = sqlite3.Row
+                    cursor = conn.cursor()
+                    
+                    like_query = f"%{query}%"
+                    cursor.execute('''
+                        SELECT * FROM cases 
+                        WHERE title LIKE ? 
+                           OR device_type LIKE ?
+                           OR fault_symptom LIKE ?
+                           OR fault_cause LIKE ?
+                           OR solution LIKE ?
+                           OR parts_used LIKE ?
+                           OR notes LIKE ?
+                           OR maintenance_type LIKE ?
+                           OR maintenance_cycle LIKE ?
+                           OR maintenance_standard LIKE ?
+                    ''', [like_query] * 10)
+                    
+                    rows = cursor.fetchall()
+                    conn.close()
+                    
+                    for row in rows:
+                        case_id = row["id"]
+                        rid = f"CASE_{case_id}"
+                        case_type = row["case_type"] if "case_type" in row.keys() else "repair"
+                        
+                        if case_type == "maintenance":
+                            content = f"{row['title']} | 设备: {row['device_type']} | 维护类型: {row['maintenance_type'] if 'maintenance_type' in row.keys() else ''} | 方案: {row['solution']}"
+                        else:
+                            content = f"{row['title']} | 设备: {row['device_type']} | 故障: {row['fault_symptom']} | 原因: {row['fault_cause']} | 方案: {row['solution']}"
+                        
+                        keyword_results[rid] = {
+                            "content": content,
+                            "score": 0.95,
+                            "match_type": "keyword",
+                            "source": "user_case",
+                            "record_id": rid,
+                            "aircraft_model": row["device_type"],
+                            "manufacturer": "",
+                            "description": row["fault_symptom"] if case_type == "repair" else "",
+                            "problem": row["fault_symptom"] if case_type == "repair" else "",
+                            "action": row["solution"]
+                        }
+            except Exception as e:
+                logger.warning(f"SQLite 关键词搜索失败: {e}")
+            
+            # ==================== 2. 向量搜索 ====================
+            try:
+                vector_cn = embedder.encode(query).tolist()
+                results_cn = client.query_points(
                     collection_name=collection_name,
-                    query=vector_en,
+                    query=vector_cn,
                     limit=5,
                     with_payload=True
                 ).points
                 
-                for r in results_en:
+                for r in results_cn:
                     payload = r.payload or {}
                     rid = payload.get("record_id", str(r.id))
-                    if rid not in all_results or r.score > all_results[rid]["score"]:
-                        all_results[rid] = {
+                    if rid not in keyword_results:
+                        vector_results[rid] = {
                             "content": payload.get("content", payload.get("text", "")),
                             "score": r.score,
+                            "match_type": "vector",
                             "source": payload.get("source", "unknown"),
                             "record_id": rid,
                             "aircraft_model": payload.get("aircraft_model", ""),
@@ -176,8 +243,45 @@ class RepairDiagnosisEngine:
                             "problem": payload.get("problem", ""),
                             "action": payload.get("action", "")
                         }
+            except Exception as e:
+                logger.warning(f"向量搜索失败: {e}")
             
-            # 按分数排序，返回前5条
+            # ==================== 3. 如果是中文，翻译后再次搜索 ====================
+            has_chinese = any('\u4e00' <= c <= '\u9fff' for c in query)
+            if has_chinese:
+                try:
+                    query_en = self._translate_to_english(query)
+                    logger.info(f"📝 翻译查询: {query} -> {query_en}")
+                    
+                    vector_en = embedder.encode(query_en).tolist()
+                    results_en = client.query_points(
+                        collection_name=collection_name,
+                        query=vector_en,
+                        limit=5,
+                        with_payload=True
+                    ).points
+                    
+                    for r in results_en:
+                        payload = r.payload or {}
+                        rid = payload.get("record_id", str(r.id))
+                        if rid not in keyword_results and rid not in vector_results:
+                            vector_results[rid] = {
+                                "content": payload.get("content", payload.get("text", "")),
+                                "score": r.score,
+                                "match_type": "vector_en",
+                                "source": payload.get("source", "unknown"),
+                                "record_id": rid,
+                                "aircraft_model": payload.get("aircraft_model", ""),
+                                "manufacturer": payload.get("manufacturer", ""),
+                                "description": payload.get("description", ""),
+                                "problem": payload.get("problem", ""),
+                                "action": payload.get("action", "")
+                            }
+                except Exception as e:
+                    logger.warning(f"翻译查询失败: {e}")
+            
+            # ==================== 4. 合并结果 ====================
+            all_results = {**keyword_results, **vector_results}
             sorted_results = sorted(all_results.values(), key=lambda x: x["score"], reverse=True)
             return sorted_results[:5]
             

@@ -44,14 +44,27 @@ docker run -d -p 6333:6333 qdrant/qdrant
 docker run -d -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/12345678 neo4j
 ```
 
-### 4. 导入航空数据
+### 4. 导入数据
 
+**方式一：一键导入所有数据（推荐）**
 ```bash
-# 测试导入 10 条
-python scripts/import_aviation.py --sample 10
+# 全量导入
+python scripts/import_all.py
 
-# 全量导入 (~9k 条)
+# 测试导入（每个文件只导入 10 条）
+python scripts/import_all.py --sample 10
+```
+
+**方式二：分步导入**
+```bash
+# 导入航空数据
 python scripts/import_aviation.py --all
+
+# 导入维修案例
+python scripts/import_repair_cases.py
+
+# 导入维护案例
+python scripts/import_maintenance_cases.py
 ```
 
 ### 5. 启动应用
@@ -86,10 +99,21 @@ agent-repair-version1/
 │   │   ├── raw_data/                # 原始数据
 │   │   └── processed_data/omin/     # 处理后的航空数据
 │   │
-│   └── memory_data/memory.db        # SQLite 记忆存储
+│   └── memory_data/
+│       └── cases.db                 # 案例数据库
+│
+├── memory_data/
+│   └── memory.db                    # 记忆数据库（系统运行时生成）
 │
 └── scripts/
-    └── import_aviation.py           # 数据导入脚本
+    ├── import_all.py                # 一键导入所有数据
+    ├── clear_all.py                 # 彻底清空所有数据库
+    ├── import_aviation.py           # 航空数据导入
+    ├── import_repair_cases.py       # 批量导入维修案例
+    ├── import_maintenance_cases.py  # 批量导入维护案例
+    └── dataset/
+        ├── repair_cases.json        # 维修案例数据
+        └── maintenance_cases.json   # 维护案例数据
 ```
 
 ## 数据库说明
@@ -163,15 +187,93 @@ docker run -d \
 | `/api/status` | GET | 系统状态 |
 | `/api/diagnose` | POST | 提交诊断 (SSE 流式) |
 | `/api/search` | POST | 知识检索 |
+| `/api/case` | POST | 添加案例 |
+| `/api/cases` | GET | 获取案例列表（支持分页和类型过滤） |
+| `/api/case/{id}` | DELETE | 删除案例 |
 | `/api/stats` | GET | 系统统计 |
 | `/api/history` | GET | 诊断历史 |
 
+**案例管理 API 参数：**
+
+```
+GET /api/cases?page=1&page_size=20&case_type=repair
+  - page: 页码（默认 1）
+  - page_size: 每页数量（默认 20）
+  - case_type: 案例类型过滤（repair/maintenance，不填返回全部）
+```
+
 ## 常见问题
 
-**Q: 如何重新导入数据？**
+**Q: 如何彻底清空数据库重新开始？**
 ```bash
-# 清空旧数据并重新导入
-python scripts/import_aviation.py --all
+# 清空所有数据库（Qdrant + Neo4j + 案例库 + 记忆库）
+python scripts/clear_all.py
+
+# 只清空特定数据库
+python scripts/clear_all.py --qdrant   # 只清空 Qdrant
+python scripts/clear_all.py --neo4j    # 只清空 Neo4j
+python scripts/clear_all.py --cases    # 只清空案例数据库
+python scripts/clear_all.py --memory   # 只清空记忆数据库
+
+# 清空后一键重新导入所有数据
+python scripts/import_all.py
+```
+
+**Q: 如何一键导入所有数据？**
+```bash
+# 全量导入（航空数据 + 维修案例 + 维护案例）
+python scripts/import_all.py
+
+# 测试导入（每个文件只导入 10 条）
+python scripts/import_all.py --sample 10
+```
+
+**Q: 如何批量导入案例？**
+
+1. 编辑 `scripts/dataset/repair_cases.json` 或 `scripts/dataset/maintenance_cases.json`
+2. 运行导入命令：
+```bash
+python scripts/import_repair_cases.py
+python scripts/import_maintenance_cases.py
+```
+
+**Q: 案例数据格式是什么？**
+
+维修案例格式：
+```json
+{
+    "cases": [
+        {
+            "title": "案例标题",
+            "device_type": "设备类型",
+            "fault_symptom": "故障现象",
+            "fault_cause": "故障原因",
+            "solution": "解决方案",
+            "parts_used": "使用备件",
+            "technician": "维修人员",
+            "notes": "备注"
+        }
+    ]
+}
+```
+
+维护案例格式：
+```json
+{
+    "cases": [
+        {
+            "title": "案例标题",
+            "device_type": "设备类型",
+            "maintenance_type": "维护类型（定期检查/更换/润滑/校准/清洁/其他）",
+            "maintenance_cycle": "维护周期",
+            "maintenance_standard": "维护标准/规范",
+            "solution": "操作步骤",
+            "parts_used": "使用备件/材料",
+            "technician": "维护人员",
+            "notes": "备注"
+        }
+    ]
+}
 ```
 
 **Q: 如何添加新的数据源？**

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>保障智能助手</title>
-    <link rel="stylesheet" href="/static/style.css?v=20260601">
+    <link rel="stylesheet" href="/static/style.css?v=20260603">
     <script src="/static/d3.min.js"></script>
 </head>
 <body>
@@ -121,61 +121,150 @@
         <div class="case-layout">
             <!-- 左侧：添加案例 -->
             <div class="case-add-panel">
-                <h2>📝 添加维修案例</h2>
-                <div class="case-templates">
-                    <h3>📋 快速模板</h3>
-                    <div class="template-buttons">
-                        <button class="btn-template" data-template="aircraft">✈️ 飞机维修</button>
-                        <button class="btn-template" data-template="engine">🔧 发动机故障</button>
-                        <button class="btn-template" data-template="landing">🛬 起落架问题</button>
-                        <button class="btn-template" data-template="custom">✏️ 自定义</button>
+                <h2>📝 添加案例</h2>
+                
+                <!-- 案例类型切换 -->
+                <div class="case-type-switch">
+                    <label class="case-type-label">
+                        <input type="radio" name="case-type" value="repair" checked>
+                        <span class="case-type-btn">🔧 维修案例</span>
+                    </label>
+                    <label class="case-type-label">
+                        <input type="radio" name="case-type" value="maintenance">
+                        <span class="case-type-btn">🛠️ 维护案例</span>
+                    </label>
+                </div>
+
+                <!-- ==================== 维修案例表单 ==================== -->
+                <div id="repair-form" class="case-form">
+                    <div class="case-templates">
+                        <h3>📋 快速模板</h3>
+                        <div class="template-buttons">
+                            <button class="btn-template" data-template="aircraft">✈️ 飞机维修</button>
+                            <button class="btn-template" data-template="engine">🔧 发动机故障</button>
+                            <button class="btn-template" data-template="landing">🛬 起落架问题</button>
+                            <button class="btn-template" data-template="custom">✏️ 自定义</button>
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label for="case-title">案例标题 *</label>
-                    <input type="text" id="case-title" placeholder="例如：CESSNA 172 发动机熄火维修" />
-                </div>
-                <div class="form-group">
-                    <label for="case-device-type">设备类型</label>
-                    <input type="text" id="case-device-type" placeholder="例如：CESSNA 172、BOEING 737" />
-                </div>
-                <div class="form-group">
-                    <label for="case-fault-symptom">故障现象</label>
-                    <textarea id="case-fault-symptom" rows="2" placeholder="描述故障的具体表现..."></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="case-fault-cause">故障原因</label>
-                    <textarea id="case-fault-cause" rows="2" placeholder="分析故障的根本原因..."></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="case-solution">解决方案</label>
-                    <textarea id="case-solution" rows="3" placeholder="详细的维修步骤..."></textarea>
-                </div>
-                <div class="form-row">
+
                     <div class="form-group">
-                        <label for="case-parts">使用备件</label>
-                        <input type="text" id="case-parts" placeholder="例如：火花塞、油封" />
+                        <label for="repair-title">案例标题 *</label>
+                        <input type="text" id="repair-title" placeholder="例如：CESSNA 172 发动机熄火维修" />
                     </div>
                     <div class="form-group">
-                        <label for="case-technician">维修人员</label>
-                        <input type="text" id="case-technician" placeholder="姓名" />
+                        <label for="repair-device-type">设备类型</label>
+                        <input type="text" id="repair-device-type" placeholder="例如：CESSNA 172、BOEING 737" />
                     </div>
+                    <div class="form-group">
+                        <label for="repair-fault-symptom">故障现象</label>
+                        <textarea id="repair-fault-symptom" rows="2" placeholder="描述故障的具体表现..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="repair-fault-cause">故障原因</label>
+                        <textarea id="repair-fault-cause" rows="2" placeholder="分析故障的根本原因..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="repair-solution">维修方案</label>
+                        <textarea id="repair-solution" rows="3" placeholder="详细的维修步骤..."></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="repair-parts">使用备件</label>
+                            <input type="text" id="repair-parts" placeholder="例如：火花塞、油封" />
+                        </div>
+                        <div class="form-group">
+                            <label for="repair-technician">维修人员</label>
+                            <input type="text" id="repair-technician" placeholder="姓名" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="repair-notes">备注</label>
+                        <textarea id="repair-notes" rows="2" placeholder="其他补充信息..."></textarea>
+                    </div>
+                    <button id="btn-add-repair" class="btn btn-primary btn-repair">➕ 添加维修案例</button>
+                    <div id="repair-result" class="result-message"></div>
                 </div>
-                <div class="form-group">
-                    <label for="case-notes">备注</label>
-                    <textarea id="case-notes" rows="2" placeholder="其他补充信息..."></textarea>
+
+                <!-- ==================== 维护案例表单 ==================== -->
+                <div id="maintenance-form" class="case-form hidden">
+                    <div class="case-templates">
+                        <h3>📋 快速模板</h3>
+                        <div class="template-buttons">
+                            <button class="btn-template" data-template="oil-change">🛢️ 更换滑油</button>
+                            <button class="btn-template" data-template="brake-change">🔄 更换刹车</button>
+                            <button class="btn-template" data-template="inspection">🔍 定期检查</button>
+                            <button class="btn-template" data-template="custom-maint">✏️ 自定义</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="maint-title">案例标题 *</label>
+                        <input type="text" id="maint-title" placeholder="例如：发动机滑油更换" />
+                    </div>
+                    <div class="form-group">
+                        <label for="maint-device-type">设备类型</label>
+                        <input type="text" id="maint-device-type" placeholder="例如：CESSNA 172、BOEING 737" />
+                    </div>
+                    <div class="form-group">
+                        <label for="maint-type">维护类型</label>
+                        <select id="maint-type">
+                            <option value="">请选择维护类型</option>
+                            <option value="定期检查">定期检查</option>
+                            <option value="更换">更换</option>
+                            <option value="润滑">润滑</option>
+                            <option value="校准">校准</option>
+                            <option value="清洁">清洁</option>
+                            <option value="其他">其他</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="maint-cycle">维护周期</label>
+                        <input type="text" id="maint-cycle" placeholder="例如：每500飞行小时" />
+                    </div>
+                    <div class="form-group">
+                        <label for="maint-standard">维护标准/规范</label>
+                        <input type="text" id="maint-standard" placeholder="参考的手册或规范" />
+                    </div>
+                    <div class="form-group">
+                        <label for="maint-solution">操作步骤</label>
+                        <textarea id="maint-solution" rows="3" placeholder="详细的维护操作步骤..."></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="maint-parts">使用备件/材料</label>
+                            <input type="text" id="maint-parts" placeholder="例如：滑油、润滑脂" />
+                        </div>
+                        <div class="form-group">
+                            <label for="maint-technician">维护人员</label>
+                            <input type="text" id="maint-technician" placeholder="姓名" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="maint-notes">备注</label>
+                        <textarea id="maint-notes" rows="2" placeholder="其他补充信息..."></textarea>
+                    </div>
+                    <button id="btn-add-maint" class="btn btn-primary btn-maintenance">➕ 添加维护案例</button>
+                    <div id="maint-result" class="result-message"></div>
                 </div>
-                <button id="btn-add-case" class="btn btn-primary">➕ 添加案例</button>
-                <div id="case-result" class="result-message"></div>
             </div>
             <!-- 右侧：案例列表 -->
             <div class="case-list-panel">
                 <h2>📚 已添加案例</h2>
+                <!-- 类型筛选标签 -->
+                <div class="case-filter-tabs">
+                    <button class="filter-tab active" data-filter="all">全部</button>
+                    <button class="filter-tab" data-filter="repair">🔧 维修</button>
+                    <button class="filter-tab" data-filter="maintenance">🛠️ 维护</button>
+                </div>
                 <div id="case-list" class="case-list">
                     <div class="loading-placeholder">
                         <span class="loading-icon">⏳</span>
                         <p>加载中...</p>
                     </div>
+                </div>
+                <!-- 分页 -->
+                <div id="case-pagination" class="pagination">
+                    <!-- 由 JS 动态填充 -->
                 </div>
             </div>
         </div>

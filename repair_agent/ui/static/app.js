@@ -36,10 +36,15 @@ const elements = {
     searchResults: document.getElementById('search-results'),
     searchHistoryList: document.getElementById('search-history-list'),
 
-    // 案例
-    caseTitle: document.getElementById('case-title'),
-    btnAddCase: document.getElementById('btn-add-case'),
-    caseResult: document.getElementById('case-result'),
+    // 案例 - 维修表单
+    btnAddRepair: document.getElementById('btn-add-repair'),
+    repairResult: document.getElementById('repair-result'),
+    
+    // 案例 - 维护表单
+    btnAddMaint: document.getElementById('btn-add-maint'),
+    maintResult: document.getElementById('maint-result'),
+    
+    // 案例列表
     caseList: document.getElementById('case-list'),
 
     // 统计
@@ -341,15 +346,16 @@ function handleRAG(data) {
         let html = '<div class="evidence-chain">';
         data.results.forEach((r, i) => {
             const sourceIcon = r.source === 'faa' ? '✈️' : r.source === 'maintnet' ? '🔧' : '📖';
-            const scorePercent = (r.score * 100).toFixed(0);
-            const scoreClass = r.score >= 0.6 ? 'score-high' : r.score >= 0.4 ? 'score-medium' : 'score-low';
+            const relevance = r.relevance || '低';
+            const relevanceClass = relevance === '高' ? 'relevance-high' : relevance === '中' ? 'relevance-medium' : 'relevance-low';
+            const matchTypeLabel = r.match_type === 'keyword' ? '🔑' : '🧠';
             
             html += `
                 <div class="evidence-item">
                     <div class="evidence-header">
                         <span class="evidence-num">#${i + 1}</span>
                         <span class="evidence-source">${sourceIcon} ${escapeHtml(r.source_label)}</span>
-                        <span class="evidence-score ${scoreClass}">${scorePercent}%</span>
+                        <span class="relevance-badge ${relevanceClass}">${matchTypeLabel} ${relevance}</span>
                     </div>
                     <div class="evidence-content">${escapeHtml(r.content)}</div>
                     <div class="evidence-details">
@@ -424,15 +430,16 @@ function handleDiagnosis(data) {
         evidenceHtml += '<div class="evidence-title">📋 诊断依据（证据链）</div>';
         data.evidence_chain.forEach((ev, i) => {
             const sourceIcon = ev.source === 'faa' ? '✈️' : ev.source === 'maintnet' ? '🔧' : '📖';
-            const scorePercent = (ev.score * 100).toFixed(0);
-            const scoreClass = ev.score >= 0.6 ? 'score-high' : ev.score >= 0.4 ? 'score-medium' : 'score-low';
+            const relevance = ev.relevance || '低';
+            const relevanceClass = relevance === '高' ? 'relevance-high' : relevance === '中' ? 'relevance-medium' : 'relevance-low';
+            const matchTypeLabel = ev.match_type === 'keyword' ? '🔑' : '🧠';
             
             evidenceHtml += `
                 <div class="evidence-item">
                     <div class="evidence-header">
                         <span class="evidence-num">#${i + 1}</span>
                         <span class="evidence-source">${sourceIcon} ${escapeHtml(ev.source_label)}</span>
-                        <span class="evidence-score ${scoreClass}">${scorePercent}%</span>
+                        <span class="relevance-badge ${relevanceClass}">${matchTypeLabel} ${relevance}</span>
                     </div>
                     <div class="evidence-content">${escapeHtml(ev.content)}</div>
                     <div class="evidence-details">
@@ -575,6 +582,8 @@ async function searchKnowledge() {
             data.results.forEach((r, i) => {
                 const content = r.content || JSON.stringify(r);
                 const score = r.score || 0;
+                const relevance = r.relevance || '低';  // 高/中/低
+                const matchType = r.match_type || 'vector';  // keyword/vector
                 const keywords = r.keywords || [];
                 const source = r.source || '知识库';
                 const aircraftModel = r.aircraft_model || '';
@@ -596,20 +605,27 @@ async function searchKnowledge() {
                     }
                 });
 
-                // 相似度等级
-                let scoreClass = 'score-low';
-                if (score >= 0.8) scoreClass = 'score-high';
-                else if (score >= 0.5) scoreClass = 'score-medium';
+                // 相似度等级样式
+                let relevanceClass = 'relevance-low';
+                let relevanceLabel = '低';
+                if (relevance === '高') {
+                    relevanceClass = 'relevance-high';
+                    relevanceLabel = '高';
+                } else if (relevance === '中') {
+                    relevanceClass = 'relevance-medium';
+                    relevanceLabel = '中';
+                }
+                
+                // 匹配类型标签
+                const matchTypeLabel = matchType === 'keyword' ? '🔑 关键词' : '🧠 语义';
 
                 html += `
                     <div class="search-result-item">
                         <div class="search-result-header">
                             <div class="search-result-title">📄 结果 ${i + 1}</div>
                             <div class="search-result-score">
-                                <div class="score-bar">
-                                    <div class="score-fill ${scoreClass}" style="width: ${score * 100}%"></div>
-                                </div>
-                                <span class="score-text">${(score * 100).toFixed(0)}%</span>
+                                <span class="relevance-badge ${relevanceClass}">相关度: ${relevanceLabel}</span>
+                                <span class="match-type-badge">${matchTypeLabel}</span>
                             </div>
                         </div>
                         <div class="search-result-content">${highlightedContent}${content.length > 300 ? '...' : ''}</div>
@@ -687,23 +703,77 @@ function renderSearchHistory() {
 
 // ==================== 案例管理 ====================
 
+// 案例管理状态
+const caseState = {
+    currentPage: 1,
+    pageSize: 10,
+    currentFilter: 'all',
+    currentCaseType: 'repair'
+};
+
 function initCase() {
-    elements.btnAddCase.addEventListener('click', addCase);
+    // 维修案例添加按钮
+    if (elements.btnAddRepair) {
+        elements.btnAddRepair.addEventListener('click', addRepairCase);
+    }
+    
+    // 维护案例添加按钮
+    if (elements.btnAddMaint) {
+        elements.btnAddMaint.addEventListener('click', addMaintenanceCase);
+    }
 
-    // 模板按钮
-    document.querySelectorAll('.btn-template').forEach(btn => {
+    // 案例类型切换
+    document.querySelectorAll('input[name="case-type"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            caseState.currentCaseType = e.target.value;
+            toggleCaseForm(e.target.value);
+        });
+    });
+
+    // 维修模板按钮
+    document.querySelectorAll('#repair-form .btn-template').forEach(btn => {
         btn.addEventListener('click', () => {
-            // 移除其他按钮的active状态
-            document.querySelectorAll('.btn-template').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('#repair-form .btn-template').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
+            applyRepairTemplate(btn.dataset.template);
+        });
+    });
+    
+    // 维护模板按钮
+    document.querySelectorAll('#maintenance-form .btn-template').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#maintenance-form .btn-template').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            applyMaintenanceTemplate(btn.dataset.template);
+        });
+    });
 
-            const template = btn.dataset.template;
-            applyTemplate(template);
+    // 筛选标签
+    document.querySelectorAll('.filter-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            caseState.currentFilter = tab.dataset.filter;
+            caseState.currentPage = 1;
+            loadCases();
         });
     });
 }
 
-function applyTemplate(type) {
+function toggleCaseForm(caseType) {
+    const repairForm = document.getElementById('repair-form');
+    const maintenanceForm = document.getElementById('maintenance-form');
+
+    if (caseType === 'repair') {
+        repairForm.classList.remove('hidden');
+        maintenanceForm.classList.add('hidden');
+    } else {
+        repairForm.classList.add('hidden');
+        maintenanceForm.classList.remove('hidden');
+    }
+}
+
+function applyRepairTemplate(type) {
     const templates = {
         aircraft: {
             title: '飞机维修案例',
@@ -749,39 +819,105 @@ function applyTemplate(type) {
 
     const template = templates[type];
     if (template) {
-        document.getElementById('case-title').value = template.title;
-        document.getElementById('case-device-type').value = template.device_type;
-        document.getElementById('case-fault-symptom').value = template.fault_symptom;
-        document.getElementById('case-fault-cause').value = template.fault_cause;
-        document.getElementById('case-solution').value = template.solution;
-        document.getElementById('case-parts').value = template.parts_used;
-        document.getElementById('case-technician').value = template.technician;
-        document.getElementById('case-notes').value = template.notes;
+        document.getElementById('repair-title').value = template.title || '';
+        document.getElementById('repair-device-type').value = template.device_type || '';
+        document.getElementById('repair-fault-symptom').value = template.fault_symptom || '';
+        document.getElementById('repair-fault-cause').value = template.fault_cause || '';
+        document.getElementById('repair-solution').value = template.solution || '';
+        document.getElementById('repair-parts').value = template.parts_used || '';
+        document.getElementById('repair-technician').value = template.technician || '';
+        document.getElementById('repair-notes').value = template.notes || '';
     }
 }
 
-async function addCase() {
-    const title = document.getElementById('case-title').value.trim();
+function applyMaintenanceTemplate(type) {
+    const templates = {
+        'oil-change': {
+            title: '发动机滑油更换',
+            device_type: 'CESSNA 172',
+            maintenance_type: '更换',
+            maintenance_cycle: '每500飞行小时或6个月',
+            maintenance_standard: 'CESSNA 172 维护手册 Chapter 12',
+            solution: '1. 发动机运行至正常工作温度\n2. 关闭发动机，拆卸放油螺塞\n3. 排放旧滑油\n4. 更换滑油滤清器\n5. 安装放油螺塞\n6. 加注新滑油至规定液位\n7. 启动发动机检查是否泄漏',
+            parts_used: '滑油滤清器、航空滑油(10W-40)、放油螺塞垫片',
+            technician: '',
+            notes: ''
+        },
+        'brake-change': {
+            title: '刹车片更换',
+            device_type: 'BOEING 737',
+            maintenance_type: '更换',
+            maintenance_cycle: '每300次起落或根据磨损指示',
+            maintenance_standard: 'AMM 32-40-00',
+            solution: '1. 使用千斤顶顶起飞机\n2. 拆卸机轮\n3. 拆卸旧刹车片\n4. 检查刹车盘磨损情况\n5. 安装新刹车片\n6. 安装机轮\n7. 测试刹车功能',
+            parts_used: '刹车片组件、刹车盘（如需要）',
+            technician: '',
+            notes: ''
+        },
+        inspection: {
+            title: '定期检查',
+            device_type: '',
+            maintenance_type: '定期检查',
+            maintenance_cycle: '每100飞行小时',
+            maintenance_standard: '适航指令 AD 相关要求',
+            solution: '1. 外部检查机体结构\n2. 飞行控制系统检查\n3. 发动机检查\n4. 液压系统检查\n5. 电气系统检查\n6. 起落架检查\n7. 记录检查结果',
+            parts_used: '',
+            technician: '',
+            notes: ''
+        },
+        'custom-maint': {
+            title: '',
+            device_type: '',
+            maintenance_type: '',
+            maintenance_cycle: '',
+            maintenance_standard: '',
+            solution: '',
+            parts_used: '',
+            technician: '',
+            notes: ''
+        }
+    };
+
+    const template = templates[type];
+    if (template) {
+        document.getElementById('maint-title').value = template.title || '';
+        document.getElementById('maint-device-type').value = template.device_type || '';
+        document.getElementById('maint-type').value = template.maintenance_type || '';
+        document.getElementById('maint-cycle').value = template.maintenance_cycle || '';
+        document.getElementById('maint-standard').value = template.maintenance_standard || '';
+        document.getElementById('maint-solution').value = template.solution || '';
+        document.getElementById('maint-parts').value = template.parts_used || '';
+        document.getElementById('maint-technician').value = template.technician || '';
+        document.getElementById('maint-notes').value = template.notes || '';
+    }
+}
+
+async function addRepairCase() {
+    const title = document.getElementById('repair-title').value.trim();
     if (!title) {
         alert('请输入案例标题');
         return;
     }
 
     const caseData = {
+        case_type: 'repair',
         title: title,
-        device_type: document.getElementById('case-device-type').value.trim(),
-        fault_symptom: document.getElementById('case-fault-symptom').value.trim(),
-        fault_cause: document.getElementById('case-fault-cause').value.trim(),
-        solution: document.getElementById('case-solution').value.trim(),
-        parts_used: document.getElementById('case-parts').value.trim(),
-        technician: document.getElementById('case-technician').value.trim(),
-        notes: document.getElementById('case-notes').value.trim()
+        device_type: document.getElementById('repair-device-type').value.trim(),
+        fault_symptom: document.getElementById('repair-fault-symptom').value.trim(),
+        fault_cause: document.getElementById('repair-fault-cause').value.trim(),
+        solution: document.getElementById('repair-solution').value.trim(),
+        parts_used: document.getElementById('repair-parts').value.trim(),
+        technician: document.getElementById('repair-technician').value.trim(),
+        notes: document.getElementById('repair-notes').value.trim()
     };
 
-    elements.btnAddCase.disabled = true;
-    elements.btnAddCase.textContent = '➕ 添加中...';
-    elements.caseResult.textContent = '';
-    elements.caseResult.className = 'result-message';
+    const btn = elements.btnAddRepair;
+    const result = elements.repairResult;
+    
+    btn.disabled = true;
+    btn.textContent = '➕ 添加中...';
+    result.textContent = '';
+    result.className = 'result-message';
 
     try {
         const response = await fetch('/api/case', {
@@ -793,29 +929,96 @@ async function addCase() {
         const data = await response.json();
 
         if (data.success) {
-            elements.caseResult.textContent = `✅ ${data.message}`;
-            elements.caseResult.className = 'result-message success';
+            result.textContent = `✅ ${data.message}`;
+            result.className = 'result-message success';
             // 清空表单
-            document.getElementById('case-title').value = '';
-            document.getElementById('case-device-type').value = '';
-            document.getElementById('case-fault-symptom').value = '';
-            document.getElementById('case-fault-cause').value = '';
-            document.getElementById('case-solution').value = '';
-            document.getElementById('case-parts').value = '';
-            document.getElementById('case-technician').value = '';
-            document.getElementById('case-notes').value = '';
+            document.getElementById('repair-title').value = '';
+            document.getElementById('repair-device-type').value = '';
+            document.getElementById('repair-fault-symptom').value = '';
+            document.getElementById('repair-fault-cause').value = '';
+            document.getElementById('repair-solution').value = '';
+            document.getElementById('repair-parts').value = '';
+            document.getElementById('repair-technician').value = '';
+            document.getElementById('repair-notes').value = '';
             // 刷新案例列表
+            caseState.currentPage = 1;
             loadCases();
         } else {
-            elements.caseResult.textContent = `❌ ${data.message}`;
-            elements.caseResult.className = 'result-message error';
+            result.textContent = `❌ ${data.message || data.error}`;
+            result.className = 'result-message error';
         }
     } catch (e) {
-        elements.caseResult.textContent = `❌ 添加失败: ${e.message}`;
-        elements.caseResult.className = 'result-message error';
+        result.textContent = `❌ 添加失败: ${e.message}`;
+        result.className = 'result-message error';
     } finally {
-        elements.btnAddCase.disabled = false;
-        elements.btnAddCase.textContent = '➕ 添加案例';
+        btn.disabled = false;
+        btn.textContent = '➕ 添加维修案例';
+    }
+}
+
+async function addMaintenanceCase() {
+    const title = document.getElementById('maint-title').value.trim();
+    if (!title) {
+        alert('请输入案例标题');
+        return;
+    }
+
+    const caseData = {
+        case_type: 'maintenance',
+        title: title,
+        device_type: document.getElementById('maint-device-type').value.trim(),
+        maintenance_type: document.getElementById('maint-type').value,
+        maintenance_cycle: document.getElementById('maint-cycle').value.trim(),
+        maintenance_standard: document.getElementById('maint-standard').value.trim(),
+        solution: document.getElementById('maint-solution').value.trim(),
+        parts_used: document.getElementById('maint-parts').value.trim(),
+        technician: document.getElementById('maint-technician').value.trim(),
+        notes: document.getElementById('maint-notes').value.trim()
+    };
+
+    const btn = elements.btnAddMaint;
+    const result = elements.maintResult;
+    
+    btn.disabled = true;
+    btn.textContent = '➕ 添加中...';
+    result.textContent = '';
+    result.className = 'result-message';
+
+    try {
+        const response = await fetch('/api/case', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(caseData)
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            result.textContent = `✅ ${data.message}`;
+            result.className = 'result-message success';
+            // 清空表单
+            document.getElementById('maint-title').value = '';
+            document.getElementById('maint-device-type').value = '';
+            document.getElementById('maint-type').value = '';
+            document.getElementById('maint-cycle').value = '';
+            document.getElementById('maint-standard').value = '';
+            document.getElementById('maint-solution').value = '';
+            document.getElementById('maint-parts').value = '';
+            document.getElementById('maint-technician').value = '';
+            document.getElementById('maint-notes').value = '';
+            // 刷新案例列表
+            caseState.currentPage = 1;
+            loadCases();
+        } else {
+            result.textContent = `❌ ${data.message || data.error}`;
+            result.className = 'result-message error';
+        }
+    } catch (e) {
+        result.textContent = `❌ 添加失败: ${e.message}`;
+        result.className = 'result-message error';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '➕ 添加维护案例';
     }
 }
 
@@ -825,39 +1028,73 @@ async function loadCases() {
     elements.caseList.innerHTML = '<div class="loading-placeholder"><span class="loading-icon">⏳</span><p>加载中...</p></div>';
 
     try {
-        const response = await fetch('/api/cases');
+        let url = `/api/cases?page=${caseState.currentPage}&page_size=${caseState.pageSize}`;
+        if (caseState.currentFilter !== 'all') {
+            url += `&case_type=${caseState.currentFilter}`;
+        }
+
+        const response = await fetch(url);
         const data = await response.json();
 
         if (data.success && data.cases && data.cases.length > 0) {
             let html = '';
             data.cases.forEach((c, i) => {
+                const caseType = c.case_type || 'repair';
+                const typeLabel = caseType === 'repair' ? '🔧 维修' : '🛠️ 维护';
+                const typeClass = caseType === 'repair' ? 'repair' : 'maintenance';
                 const title = c.title || `案例 ${i + 1}`;
                 const deviceType = c.device_type || '';
-                const faultSymptom = c.fault_symptom || '';
-                const faultCause = c.fault_cause || '';
                 const solution = c.solution || '';
                 const partsUsed = c.parts_used || '';
                 const technician = c.technician || '';
                 const notes = c.notes || '';
                 const createdAt = c.created_at || '';
 
-                html += `
-                    <div class="case-item">
-                        <div class="case-item-header">
-                            <div class="case-item-title">✈️ ${escapeHtml(title)}</div>
-                            <div class="case-item-time">${createdAt ? escapeHtml(createdAt.substring(0, 10)) : ''}</div>
-                        </div>
-                        ${deviceType ? `<div class="case-item-field"><strong>🛩️ 设备类型:</strong> ${escapeHtml(deviceType)}</div>` : ''}
+                let fieldsHtml = '';
+
+                if (caseType === 'repair') {
+                    const faultSymptom = c.fault_symptom || '';
+                    const faultCause = c.fault_cause || '';
+                    fieldsHtml = `
                         ${faultSymptom ? `<div class="case-item-field"><strong>⚠️ 故障现象:</strong> ${escapeHtml(faultSymptom)}</div>` : ''}
                         ${faultCause ? `<div class="case-item-field"><strong>🔍 故障原因:</strong> ${escapeHtml(faultCause)}</div>` : ''}
+                    `;
+                } else {
+                    const maintenanceType = c.maintenance_type || '';
+                    const maintenanceCycle = c.maintenance_cycle || '';
+                    const maintenanceStandard = c.maintenance_standard || '';
+                    fieldsHtml = `
+                        ${maintenanceType ? `<div class="case-item-field"><strong>📋 维护类型:</strong> ${escapeHtml(maintenanceType)}</div>` : ''}
+                        ${maintenanceCycle ? `<div class="case-item-field"><strong>🔄 维护周期:</strong> ${escapeHtml(maintenanceCycle)}</div>` : ''}
+                        ${maintenanceStandard ? `<div class="case-item-field"><strong>📐 维护标准:</strong> ${escapeHtml(maintenanceStandard)}</div>` : ''}
+                    `;
+                }
+
+                html += `
+                    <div class="case-item ${typeClass}" data-id="${c.id}">
+                        <div class="case-item-header">
+                            <div>
+                                <span class="case-type-tag ${typeClass}">${typeLabel}</span>
+                                <span class="case-item-title">${escapeHtml(title)}</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="case-item-time">${createdAt ? escapeHtml(createdAt.substring(0, 10)) : ''}</span>
+                                <button class="case-delete-btn" onclick="confirmDeleteCase(${c.id}, '${escapeHtml(title).replace(/'/g, "\\'")}')" title="删除案例">🗑️</button>
+                            </div>
+                        </div>
+                        ${deviceType ? `<div class="case-item-field"><strong>🛩️ 设备类型:</strong> ${escapeHtml(deviceType)}</div>` : ''}
+                        ${fieldsHtml}
                         ${solution ? `<div class="case-item-field"><strong>🔧 解决方案:</strong> ${escapeHtml(solution).replace(/\n/g, '<br>')}</div>` : ''}
                         ${partsUsed ? `<div class="case-item-field"><strong>📦 使用备件:</strong> ${escapeHtml(partsUsed)}</div>` : ''}
-                        ${technician ? `<div class="case-item-field"><strong>👤 维修人员:</strong> ${escapeHtml(technician)}</div>` : ''}
+                        ${technician ? `<div class="case-item-field"><strong>👤 维修/维护人员:</strong> ${escapeHtml(technician)}</div>` : ''}
                         ${notes ? `<div class="case-item-field"><strong>📝 备注:</strong> ${escapeHtml(notes)}</div>` : ''}
                     </div>
                 `;
             });
             elements.caseList.innerHTML = html;
+
+            // 渲染分页
+            renderPagination(data.total, data.page, data.total_pages);
         } else {
             elements.caseList.innerHTML = `
                 <div class="loading-placeholder">
@@ -865,9 +1102,95 @@ async function loadCases() {
                     <p>暂无案例记录</p>
                 </div>
             `;
+            document.getElementById('case-pagination').innerHTML = '';
         }
     } catch (e) {
         elements.caseList.innerHTML = `<div class="loading-placeholder"><p style="color: #dc2626;">❌ 加载失败: ${e.message}</p></div>`;
+    }
+}
+
+function renderPagination(total, currentPage, totalPages) {
+    const paginationEl = document.getElementById('case-pagination');
+    if (!paginationEl || totalPages <= 1) {
+        if (paginationEl) paginationEl.innerHTML = '';
+        return;
+    }
+
+    let html = '';
+    html += `<button class="pagination-btn" onclick="goToPage(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>◀ 上一页</button>`;
+
+    // 显示页码
+    const maxVisible = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+
+    if (endPage - startPage < maxVisible - 1) {
+        startPage = Math.max(1, endPage - maxVisible + 1);
+    }
+
+    if (startPage > 1) {
+        html += `<button class="pagination-btn" onclick="goToPage(1)">1</button>`;
+        if (startPage > 2) html += `<span class="pagination-info">...</span>`;
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+        html += `<button class="pagination-btn ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+    }
+
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) html += `<span class="pagination-info">...</span>`;
+        html += `<button class="pagination-btn" onclick="goToPage(${totalPages})">${totalPages}</button>`;
+    }
+
+    html += `<button class="pagination-btn" onclick="goToPage(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>下一页 ▶</button>`;
+    html += `<span class="pagination-info">共 ${total} 条</span>`;
+
+    paginationEl.innerHTML = html;
+}
+
+function goToPage(page) {
+    caseState.currentPage = page;
+    loadCases();
+}
+
+function confirmDeleteCase(caseId, caseTitle) {
+    // 创建确认对话框
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-title">⚠️ 确认删除</div>
+            <div class="modal-message">确定要删除案例「${caseTitle}」吗？<br>此操作不可撤销。</div>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-btn-cancel" onclick="this.closest('.modal-overlay').remove()">取消</button>
+                <button class="modal-btn modal-btn-confirm" onclick="deleteCase(${caseId}); this.closest('.modal-overlay').remove()">确认删除</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    // 点击遮罩关闭
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.remove();
+    });
+}
+
+async function deleteCase(caseId) {
+    try {
+        const response = await fetch(`/api/case/${caseId}`, {
+            method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            // 重新加载案例列表
+            loadCases();
+        } else {
+            alert(`删除失败: ${data.error || '未知错误'}`);
+        }
+    } catch (e) {
+        alert(`删除失败: ${e.message}`);
     }
 }
 

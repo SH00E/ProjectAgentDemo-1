@@ -1,0 +1,61 @@
+{
+    "_comment": "维护案例批量导入数据文件",
+    "_format": "JSON 数组，每个元素为一个维护案例",
+    "_fields": {
+        "title": "案例标题（必填）",
+        "device_type": "设备类型，如：CESSNA 172、BOEING 737",
+        "maintenance_type": "维护类型：定期检查/更换/润滑/校准/清洁/其他",
+        "maintenance_cycle": "维护周期，如：每500飞行小时",
+        "maintenance_standard": "维护标准/规范，参考的手册",
+        "solution": "维护操作步骤",
+        "parts_used": "使用的备件/材料",
+        "technician": "维护人员",
+        "notes": "备注信息"
+    },
+    "cases": [
+        {
+            "title": "发动机滑油更换",
+            "device_type": "CESSNA 172",
+            "maintenance_type": "更换",
+            "maintenance_cycle": "每500飞行小时或6个月",
+            "maintenance_standard": "CESSNA 172 维护手册 Chapter 12",
+            "solution": "1. 发动机运行至正常工作温度\n2. 关闭发动机，拆卸放油螺塞\n3. 排放旧滑油\n4. 更换滑油滤清器\n5. 安装放油螺塞\n6. 加注新滑油至规定液位\n7. 启动发动机检查是否泄漏",
+            "parts_used": "滑油滤清器、航空滑油(10W-40)、放油螺塞垫片",
+            "technician": "张三",
+            "notes": "使用厂家推荐的滑油型号"
+        },
+        {
+            "title": "刹车片更换",
+            "device_type": "BOEING 737",
+            "maintenance_type": "更换",
+            "maintenance_cycle": "每300次起落或根据磨损指示",
+            "maintenance_standard": "AMM 32-40-00",
+            "solution": "1. 使用千斤顶顶起飞机\n2. 拆卸机轮\n3. 拆卸旧刹车片\n4. 检查刹车盘磨损情况\n5. 安装新刹车片\n6. 安装机轮\n7. 测试刹车功能",
+            "parts_used": "刹车片组件、刹车盘（如需要）",
+            "technician": "李四",
+            "notes": "刹车片磨损至指示线时必须更换"
+        },
+        {
+            "title": "100小时定期检查",
+            "device_type": "CESSNA 172",
+            "maintenance_type": "定期检查",
+            "maintenance_cycle": "每100飞行小时",
+            "maintenance_standard": "FAR 43 附录D",
+            "solution": "1. 外部检查机体结构\n2. 飞行控制系统检查\n3. 发动机检查\n4. 液压系统检查\n5. 电气系统检查\n6. 起落架检查\n7. 记录检查结果",
+            "parts_used": "",
+            "technician": "王五",
+            "notes": "检查发现的问题需记录并及时处理"
+        },
+        {
+            "title": "螺旋桨润滑保养",
+            "device_type": "CESSNA 172",
+            "maintenance_type": "润滑",
+            "maintenance_cycle": "每100飞行小时",
+            "maintenance_standard": "螺旋桨维护手册",
+            "solution": "1. 清洁螺旋桨表面\n2. 检查桨叶是否有裂纹或损伤\n3. 润滑桨毂轴承\n4. 检查桨叶安装螺栓扭矩\n5. 记录维护信息",
+            "parts_used": "航空润滑脂",
+            "technician": "赵六",
+            "notes": "发现桨叶损伤超过限制需立即更换"
+        }
+    ]
+}

@@ -252,6 +252,22 @@ textarea {
     cursor: not-allowed;
 }
 
+.btn-repair {
+    background: #3b82f6;
+}
+
+.btn-repair:hover:not(:disabled) {
+    background: #2563eb;
+}
+
+.btn-maintenance {
+    background: #10b981;
+}
+
+.btn-maintenance:hover:not(:disabled) {
+    background: #059669;
+}
+
 /* 推理过程面板 */
 .cot-panel {
     background: white;
@@ -469,6 +485,41 @@ textarea {
 .score-low {
     background: #fee2e2;
     color: #991b1b;
+}
+
+/* ==================== 相关度标签 ==================== */
+
+.relevance-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.relevance-high {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.relevance-medium {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.relevance-low {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.match-type-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    background: #f1f5f9;
+    color: #475569;
+    margin-left: 6px;
 }
 
 .evidence-content {
@@ -858,11 +909,25 @@ textarea {
     border-radius: 8px;
     margin-bottom: 10px;
     transition: all 0.2s;
+    border-left: 4px solid transparent;
+}
+
+.case-item.repair {
+    border-left-color: #3b82f6;
+}
+
+.case-item.maintenance {
+    border-left-color: #10b981;
 }
 
 .case-item:hover {
     border-color: #3b82f6;
     box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
+}
+
+.case-item.maintenance:hover {
+    border-color: #10b981;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.1);
 }
 
 .case-item-header {
@@ -932,7 +997,257 @@ textarea {
     overflow-y: auto;
 }
 
-.loading-placeholder {
+/* ==================== 案例类型切换 ==================== */
+
+.case-type-switch {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding: 4px;
+    background: #f1f5f9;
+    border-radius: 10px;
+}
+
+.case-type-label {
+    flex: 1;
+    cursor: pointer;
+}
+
+.case-type-label input[type="radio"] {
+    display: none;
+}
+
+.case-type-btn {
+    display: block;
+    padding: 10px 16px;
+    text-align: center;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #64748b;
+    transition: all 0.2s;
+}
+
+.case-type-label input[type="radio"]:checked + .case-type-btn {
+    background: white;
+    color: #1e293b;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.case-type-btn:hover {
+    color: #1e293b;
+}
+
+/* ==================== 维护字段样式 ==================== */
+
+#maintenance-fields select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #1e293b;
+    background: white;
+    cursor: pointer;
+}
+
+#maintenance-fields select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* ==================== 案例筛选标签 ==================== */
+
+.case-filter-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.filter-tab {
+    padding: 6px 14px;
+    border: 1px solid #e2e8f0;
+    background: white;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.filter-tab:hover {
+    border-color: #3b82f6;
+    color: #1e40af;
+}
+
+.filter-tab.active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: white;
+}
+
+/* ==================== 案例类型标签 ==================== */
+
+.case-type-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.case-type-tag.repair {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.case-type-tag.maintenance {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+/* ==================== 删除按钮 ==================== */
+
+.case-delete-btn {
+    padding: 4px 8px;
+    border: none;
+    background: transparent;
+    color: #94a3b8;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.case-delete-btn:hover {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+/* ==================== 分页 ==================== */
+
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.pagination-btn {
+    padding: 6px 12px;
+    border: 1px solid #e2e8f0;
+    background: white;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+    border-color: #3b82f6;
+    color: #1e40af;
+}
+
+.pagination-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pagination-btn.active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: white;
+}
+
+.pagination-info {
+    font-size: 13px;
+    color: #64748b;
+    margin: 0 8px;
+}
+
+/* ==================== 确认对话框 ==================== */
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.modal-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 12px;
+}
+
+.modal-message {
+    font-size: 14px;
+    color: #475569;
+    margin-bottom: 24px;
+    line-height: 1.6;
+}
+
+.modal-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.modal-btn {
+    padding: 8px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.modal-btn-cancel {
+    border: 1px solid #e2e8f0;
+    background: white;
+    color: #475569;
+}
+
+.modal-btn-cancel:hover {
+    background: #f1f5f9;
+}
+
+.modal-btn-confirm {
+    border: none;
+    background: #dc2626;
+    color: white;
+}
+
+.modal-btn-confirm:hover {
+    background: #b91c1c;
+}
+
+/* ==================== 案例表单行 ==================== */
     display: flex;
     flex-direction: column;
     align-items: center;

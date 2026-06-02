@@ -1,0 +1,46 @@
+{
+    "_comment": "维修案例批量导入数据文件",
+    "_format": "JSON 数组，每个元素为一个维修案例",
+    "_fields": {
+        "title": "案例标题（必填）",
+        "device_type": "设备类型，如：CESSNA 172、BOEING 737",
+        "fault_symptom": "故障现象描述",
+        "fault_cause": "故障原因分析",
+        "solution": "解决方案/维修步骤",
+        "parts_used": "使用的备件",
+        "technician": "维修人员",
+        "notes": "备注信息"
+    },
+    "cases": [
+        {
+            "title": "CESSNA 172 发动机熄火维修",
+            "device_type": "CESSNA 172",
+            "fault_symptom": "发动机运行不稳定，出现间歇性熄火",
+            "fault_cause": "燃油滤清器堵塞，导致供油不足",
+            "solution": "1. 检查燃油系统\n2. 更换燃油滤清器\n3. 测试发动机运行",
+            "parts_used": "燃油滤清器",
+            "technician": "张三",
+            "notes": "建议每500小时更换一次燃油滤清器"
+        },
+        {
+            "title": "BOEING 737 起落架故障维修",
+            "device_type": "BOEING 737",
+            "fault_symptom": "起落架收放异常，指示灯不亮",
+            "fault_cause": "液压系统泄漏，压力不足",
+            "solution": "1. 检查液压系统\n2. 修复泄漏点\n3. 补充液压油\n4. 测试起落架收放",
+            "parts_used": "液压油管、密封圈",
+            "technician": "李四",
+            "notes": ""
+        },
+        {
+            "title": "发动机火花塞积碳维修",
+            "device_type": "CONTINENTAL IO-360",
+            "fault_symptom": "发动机功率下降，排气管冒黑烟",
+            "fault_cause": "火花塞积碳严重，点火不良",
+            "solution": "1. 拆卸火花塞\n2. 清洁或更换火花塞\n3. 检查点火系统\n4. 测试运行",
+            "parts_used": "火花塞",
+            "technician": "王五",
+            "notes": "定期检查火花塞状态"
+        }
+    ]
+}

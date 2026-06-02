@@ -37,6 +37,7 @@ def init_cases_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS cases (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            case_type TEXT DEFAULT 'repair',
             title TEXT NOT NULL,
             device_type TEXT,
             fault_symptom TEXT,
@@ -46,9 +47,26 @@ def init_cases_db():
             technician TEXT,
             notes TEXT,
             case_text TEXT,
+            maintenance_type TEXT,
+            maintenance_cycle TEXT,
+            maintenance_standard TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    
+    # 检查是否需要升级旧表结构
+    cursor.execute("PRAGMA table_info(cases)")
+    columns = [col[1] for col in cursor.fetchall()]
+    
+    if 'case_type' not in columns:
+        cursor.execute("ALTER TABLE cases ADD COLUMN case_type TEXT DEFAULT 'repair'")
+    if 'maintenance_type' not in columns:
+        cursor.execute("ALTER TABLE cases ADD COLUMN maintenance_type TEXT")
+    if 'maintenance_cycle' not in columns:
+        cursor.execute("ALTER TABLE cases ADD COLUMN maintenance_cycle TEXT")
+    if 'maintenance_standard' not in columns:
+        cursor.execute("ALTER TABLE cases ADD COLUMN maintenance_standard TEXT")
+    
     conn.commit()
     conn.close()
 
@@ -57,9 +75,10 @@ def save_case_to_db(case_data: Dict) -> int:
     conn = sqlite3.connect(CASES_DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT INTO cases (title, device_type, fault_symptom, fault_cause, solution, parts_used, technician, notes, case_text)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO cases (case_type, title, device_type, fault_symptom, fault_cause, solution, parts_used, technician, notes, case_text, maintenance_type, maintenance_cycle, maintenance_standard)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
+        case_data.get("case_type", "repair"),
         case_data.get("title", ""),
         case_data.get("device_type", ""),
         case_data.get("fault_symptom", ""),
@@ -68,19 +87,38 @@ def save_case_to_db(case_data: Dict) -> int:
         case_data.get("parts_used", ""),
         case_data.get("technician", ""),
         case_data.get("notes", ""),
-        case_data.get("case_text", "")
+        case_data.get("case_text", ""),
+        case_data.get("maintenance_type", ""),
+        case_data.get("maintenance_cycle", ""),
+        case_data.get("maintenance_standard", "")
     ))
     case_id = cursor.lastrowid
     conn.commit()
     conn.close()
     return case_id
 
-def load_cases_from_db(limit: int = 50) -> List[Dict]:
-    """从数据库加载案例"""
+def load_cases_from_db(limit: int = 50, offset: int = 0, case_type: str = None) -> Dict:
+    """从数据库加载案例（支持分页和类型过滤）"""
     conn = sqlite3.connect(CASES_DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM cases ORDER BY created_at DESC LIMIT ?', (limit,))
+    
+    # 构建查询
+    where_clause = ""
+    params = []
+    
+    if case_type and case_type in ('repair', 'maintenance'):
+        where_clause = "WHERE case_type = ?"
+        params.append(case_type)
+    
+    # 获取总数
+    count_sql = f"SELECT COUNT(*) FROM cases {where_clause}"
+    cursor.execute(count_sql, params)
+    total = cursor.fetchone()[0]
+    
+    # 获取分页数据
+    query_params = params + [limit, offset]
+    cursor.execute(f'SELECT * FROM cases {where_clause} ORDER BY created_at DESC LIMIT ? OFFSET ?', query_params)
     rows = cursor.fetchall()
     conn.close()
     
@@ -88,6 +126,7 @@ def load_cases_from_db(limit: int = 50) -> List[Dict]:
     for row in rows:
         cases.append({
             "id": row["id"],
+            "case_type": row["case_type"] if "case_type" in row.keys() else "repair",
             "title": row["title"],
             "device_type": row["device_type"],
             "fault_symptom": row["fault_symptom"],
@@ -97,9 +136,51 @@ def load_cases_from_db(limit: int = 50) -> List[Dict]:
             "technician": row["technician"],
             "notes": row["notes"],
             "case_text": row["case_text"],
+            "maintenance_type": row["maintenance_type"] if "maintenance_type" in row.keys() else "",
+            "maintenance_cycle": row["maintenance_cycle"] if "maintenance_cycle" in row.keys() else "",
+            "maintenance_standard": row["maintenance_standard"] if "maintenance_standard" in row.keys() else "",
             "created_at": row["created_at"]
         })
-    return cases
+    return {"cases": cases, "total": total}
+
+def delete_case_from_db(case_id: int) -> bool:
+    """从数据库删除案例"""
+    conn = sqlite3.connect(CASES_DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM cases WHERE id = ?", (case_id,))
+    deleted = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return deleted
+
+def get_case_by_id(case_id: int) -> Optional[Dict]:
+    """根据ID获取案例"""
+    conn = sqlite3.connect(CASES_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM cases WHERE id = ?", (case_id,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    if row:
+        return {
+            "id": row["id"],
+            "case_type": row["case_type"] if "case_type" in row.keys() else "repair",
+            "title": row["title"],
+            "device_type": row["device_type"],
+            "fault_symptom": row["fault_symptom"],
+            "fault_cause": row["fault_cause"],
+            "solution": row["solution"],
+            "parts_used": row["parts_used"],
+            "technician": row["technician"],
+            "notes": row["notes"],
+            "case_text": row["case_text"],
+            "maintenance_type": row["maintenance_type"] if "maintenance_type" in row.keys() else "",
+            "maintenance_cycle": row["maintenance_cycle"] if "maintenance_cycle" in row.keys() else "",
+            "maintenance_standard": row["maintenance_standard"] if "maintenance_standard" in row.keys() else "",
+            "created_at": row["created_at"]
+        }
+    return None
 
 # 初始化数据库
 init_cases_db()
@@ -181,9 +262,23 @@ def diagnosis_stream(description: str, image_path: str = None):
                     source = r.get("source", "unknown")
                     source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "知识图谱" if source == "neo4j" else "知识库"
                     
+                    # 计算相似度等级
+                    score = r.get("score", 0)
+                    match_type = r.get("match_type", "vector")
+                    if match_type == "keyword":
+                        relevance = "高"
+                    elif score >= 0.6:
+                        relevance = "高"
+                    elif score >= 0.4:
+                        relevance = "中"
+                    else:
+                        relevance = "低"
+                    
                     results.append({
                         "content": r.get("content", str(r))[:200],
-                        "score": r.get("score", 0),
+                        "score": score,
+                        "relevance": relevance,
+                        "match_type": match_type,
                         "source": source,
                         "source_label": source_label,
                         "record_id": r.get("record_id", ""),
@@ -219,6 +314,8 @@ def diagnosis_stream(description: str, image_path: str = None):
                 evidence_chain.append({
                     "content": ref.get("content", "")[:200],
                     "score": ref.get("score", 0),
+                    "relevance": "高" if ref.get("match_type") == "keyword" or ref.get("score", 0) >= 0.6 else "中" if ref.get("score", 0) >= 0.4 else "低",
+                    "match_type": ref.get("match_type", "vector"),
                     "source": source,
                     "source_label": source_label,
                     "record_id": ref.get("record_id", ""),
@@ -345,7 +442,7 @@ async def diagnose(
 
 @app.post("/api/search")
 async def search_knowledge(request: Request):
-    """知识检索 - 支持中英文双语搜索"""
+    """知识检索 - 混合搜索（关键词 + 向量）"""
     if agent_state["agent"] is None:
         return JSONResponse(status_code=503, content={"error": "系统未就绪"})
 
@@ -356,6 +453,7 @@ async def search_knowledge(request: Request):
 
     try:
         from qdrant_client import QdrantClient
+        from qdrant_client.models import Filter, FieldCondition, MatchText, MatchValue
         from hello_agents.memory.embedding import get_text_embedder
         
         qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
@@ -366,51 +464,125 @@ async def search_knowledge(request: Request):
         collections = [c.name for c in client.get_collections().collections]
         collection_name = "aviation_knowledge_base" if "aviation_knowledge_base" in collections else "rag_knowledge_base"
         
-        all_results = {}
+        # 分离关键词结果和向量结果
+        keyword_results = {}  # 关键词匹配的结果（高优先级）
+        vector_results = {}   # 向量搜索的结果（低优先级）
         
-        # 1. 用原始查询搜索
-        vector_cn = embedder.encode(query).tolist()
-        results_cn = client.query_points(
-            collection_name=collection_name,
-            query=vector_cn,
-            limit=10,
-            with_payload=True
-        ).points
-        
-        for r in results_cn:
-            payload = r.payload or {}
-            rid = payload.get("record_id", str(r.id))
-            if rid not in all_results or r.score > all_results[rid]["score"]:
-                all_results[rid] = {
+        # ==================== 1. 关键词搜索（Qdrant 全文索引）====================
+        try:
+            # 使用 MatchText 进行模糊匹配
+            keyword_filter = Filter(
+                should=[
+                    FieldCondition(key="content", match=MatchText(text=query)),
+                    FieldCondition(key="text", match=MatchText(text=query)),
+                    FieldCondition(key="description", match=MatchText(text=query)),
+                    FieldCondition(key="description_zh", match=MatchText(text=query)),
+                    FieldCondition(key="problem", match=MatchText(text=query)),
+                    FieldCondition(key="problem_zh", match=MatchText(text=query)),
+                    FieldCondition(key="action", match=MatchText(text=query)),
+                    FieldCondition(key="action_zh", match=MatchText(text=query)),
+                ]
+            )
+            
+            # 使用 scroll 进行关键词搜索
+            keyword_scroll = client.scroll(
+                collection_name=collection_name,
+                scroll_filter=keyword_filter,
+                limit=10,
+                with_payload=True
+            )
+            
+            for point in keyword_scroll[0]:
+                payload = point.payload or {}
+                rid = payload.get("record_id", str(point.id))
+                # 关键词匹配给高分 0.9
+                keyword_results[rid] = {
                     "content": payload.get("content", payload.get("text", "")),
-                    "score": r.score,
+                    "score": 0.9,
+                    "match_type": "keyword",
                     "source": payload.get("source", "unknown"),
                     "record_id": rid,
                     "aircraft_model": payload.get("aircraft_model", ""),
                     "manufacturer": payload.get("manufacturer", ""),
-                    "description": payload.get("description", ""),
-                    "problem": payload.get("problem", ""),
-                    "action": payload.get("action", "")
+                    "description": payload.get("description", "") or payload.get("description_zh", ""),
+                    "problem": payload.get("problem", "") or payload.get("problem_zh", ""),
+                    "action": payload.get("action", "") or payload.get("action_zh", "")
                 }
+            logger.info(f"关键词搜索 Qdrant: 找到 {len(keyword_results)} 条")
+        except Exception as e:
+            logger.warning(f"Qdrant 关键词搜索失败: {e}")
         
-        # 1.5 额外搜索用户添加的案例
+        # ==================== 1.5 关键词搜索（SQLite 案例库）====================
         try:
-            from qdrant_client.models import Filter, FieldCondition, MatchValue
-            user_case_results = client.query_points(
+            conn = sqlite3.connect(CASES_DB_PATH)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            # 模糊匹配多个字段
+            like_query = f"%{query}%"
+            cursor.execute('''
+                SELECT * FROM cases 
+                WHERE title LIKE ? 
+                   OR device_type LIKE ?
+                   OR fault_symptom LIKE ?
+                   OR fault_cause LIKE ?
+                   OR solution LIKE ?
+                   OR parts_used LIKE ?
+                   OR notes LIKE ?
+                   OR maintenance_type LIKE ?
+                   OR maintenance_cycle LIKE ?
+                   OR maintenance_standard LIKE ?
+            ''', [like_query] * 10)
+            
+            rows = cursor.fetchall()
+            conn.close()
+            
+            for row in rows:
+                case_id = row["id"]
+                rid = f"CASE_{case_id}"
+                case_type = row["case_type"] if "case_type" in row.keys() else "repair"
+                
+                # 构建内容文本
+                if case_type == "maintenance":
+                    content = f"{row['title']} | 设备: {row['device_type']} | 维护类型: {row['maintenance_type'] if 'maintenance_type' in row.keys() else ''} | 周期: {row['maintenance_cycle'] if 'maintenance_cycle' in row.keys() else ''} | 方案: {row['solution']}"
+                else:
+                    content = f"{row['title']} | 设备: {row['device_type']} | 故障: {row['fault_symptom']} | 原因: {row['fault_cause']} | 方案: {row['solution']}"
+                
+                keyword_results[rid] = {
+                    "content": content,
+                    "score": 0.95,  # SQLite 关键词匹配给最高分
+                    "match_type": "keyword",
+                    "source": "user_case",
+                    "record_id": rid,
+                    "aircraft_model": row["device_type"],
+                    "manufacturer": "",
+                    "description": row["fault_symptom"] if case_type == "repair" else (row["maintenance_type"] if "maintenance_type" in row.keys() else ""),
+                    "problem": row["fault_symptom"] if case_type == "repair" else (row["maintenance_type"] if "maintenance_type" in row.keys() else ""),
+                    "action": row["solution"],
+                    "case_type": case_type
+                }
+            logger.info(f"关键词搜索 SQLite: 找到 {len(rows)} 条")
+        except Exception as e:
+            logger.warning(f"SQLite 关键词搜索失败: {e}")
+        
+        # ==================== 2. 向量搜索 ====================
+        try:
+            vector_cn = embedder.encode(query).tolist()
+            results_cn = client.query_points(
                 collection_name=collection_name,
                 query=vector_cn,
-                query_filter=Filter(must=[FieldCondition(key="source", match=MatchValue(value="user_case"))]),
-                limit=5,
+                limit=10,
                 with_payload=True
             ).points
             
-            for r in user_case_results:
+            for r in results_cn:
                 payload = r.payload or {}
                 rid = payload.get("record_id", str(r.id))
-                if rid not in all_results or r.score > all_results[rid]["score"]:
-                    all_results[rid] = {
+                if rid not in keyword_results:  # 关键词结果优先，不覆盖
+                    vector_results[rid] = {
                         "content": payload.get("content", payload.get("text", "")),
                         "score": r.score,
+                        "match_type": "vector",
                         "source": payload.get("source", "unknown"),
                         "record_id": rid,
                         "aircraft_model": payload.get("aircraft_model", ""),
@@ -419,10 +591,11 @@ async def search_knowledge(request: Request):
                         "problem": payload.get("problem", ""),
                         "action": payload.get("action", "")
                     }
+            logger.info(f"向量搜索: 找到 {len(results_cn)} 条")
         except Exception as e:
-            logger.warning(f"搜索用户案例失败: {e}")
+            logger.warning(f"向量搜索失败: {e}")
         
-        # 2. 如果是中文，翻译后再次搜索
+        # ==================== 3. 如果是中文，翻译后再次搜索 ====================
         has_chinese = any('\u4e00' <= c <= '\u9fff' for c in query)
         if has_chinese:
             try:
@@ -441,10 +614,11 @@ async def search_knowledge(request: Request):
                 for r in results_en:
                     payload = r.payload or {}
                     rid = payload.get("record_id", str(r.id))
-                    if rid not in all_results or r.score > all_results[rid]["score"]:
-                        all_results[rid] = {
+                    if rid not in keyword_results and rid not in vector_results:
+                        vector_results[rid] = {
                             "content": payload.get("content", payload.get("text", "")),
                             "score": r.score,
+                            "match_type": "vector_en",
                             "source": payload.get("source", "unknown"),
                             "record_id": rid,
                             "aircraft_model": payload.get("aircraft_model", ""),
@@ -456,17 +630,46 @@ async def search_knowledge(request: Request):
             except Exception as e:
                 logger.warning(f"翻译查询失败: {e}")
         
-        # 按分数排序，返回前5条
-        sorted_results = sorted(all_results.values(), key=lambda x: x["score"], reverse=True)[:5]
+        # ==================== 4. 合并结果，关键词优先 ====================
+        # 关键词结果排在前面
+        all_results = {**keyword_results, **vector_results}
+        
+        # 按分数排序（关键词结果分数高，会排在前面）
+        sorted_results = sorted(all_results.values(), key=lambda x: x["score"], reverse=True)[:10]
         
         # 格式化结果
         enhanced_results = []
         for r in sorted_results:
             source = r.get("source", "unknown")
             source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "用户案例" if source == "user_case" else "知识库"
-            r["source"] = source_label
-            r["keywords"] = query.split()
-            enhanced_results.append(r)
+            
+            # 计算相似度等级
+            score = r.get("score", 0)
+            match_type = r.get("match_type", "vector")
+            
+            if match_type == "keyword":
+                relevance = "高"  # 关键词匹配直接显示高
+            elif score >= 0.6:
+                relevance = "高"
+            elif score >= 0.4:
+                relevance = "中"
+            else:
+                relevance = "低"
+            
+            enhanced_results.append({
+                "content": r.get("content", ""),
+                "score": score,
+                "relevance": relevance,
+                "match_type": match_type,
+                "source": source_label,
+                "record_id": r.get("record_id", ""),
+                "aircraft_model": r.get("aircraft_model", ""),
+                "manufacturer": r.get("manufacturer", ""),
+                "description": r.get("description", ""),
+                "problem": r.get("problem", ""),
+                "action": r.get("action", ""),
+                "keywords": query.split()
+            })
         
         return {"success": True, "results": enhanced_results, "query": query}
     except Exception as e:
@@ -482,16 +685,21 @@ async def add_case(request: Request):
     body = await request.json()
     
     # 支持结构化案例
+    case_type = body.get("case_type", "repair").strip()
     case_data = {
+        "case_type": case_type,
         "title": body.get("title", "").strip(),
         "device_type": body.get("device_type", "").strip(),
-        "fault_symptom": body.get("fault_symptom", "").strip(),
-        "fault_cause": body.get("fault_cause", "").strip(),
+        "fault_symptom": body.get("fault_symptom", "").strip() if case_type == "repair" else "",
+        "fault_cause": body.get("fault_cause", "").strip() if case_type == "repair" else "",
         "solution": body.get("solution", "").strip(),
         "parts_used": body.get("parts_used", "").strip(),
         "technician": body.get("technician", "").strip(),
         "notes": body.get("notes", "").strip(),
-        "case_text": body.get("case_text", "").strip()
+        "case_text": body.get("case_text", "").strip(),
+        "maintenance_type": body.get("maintenance_type", "").strip() if case_type == "maintenance" else "",
+        "maintenance_cycle": body.get("maintenance_cycle", "").strip() if case_type == "maintenance" else "",
+        "maintenance_standard": body.get("maintenance_standard", "").strip() if case_type == "maintenance" else ""
     }
     
     # 如果只有 case_text，尝试从中提取信息
@@ -517,7 +725,11 @@ async def add_case(request: Request):
             embedder = get_text_embedder()
             
             # 构建可检索的文本
-            search_text = f"{case_data['title']} | 设备: {case_data['device_type']} | 故障: {case_data['fault_symptom']} | 原因: {case_data['fault_cause']} | 方案: {case_data['solution']}"
+            if case_type == "maintenance":
+                search_text = f"{case_data['title']} | 设备: {case_data['device_type']} | 维护类型: {case_data['maintenance_type']} | 方案: {case_data['solution']}"
+            else:
+                search_text = f"{case_data['title']} | 设备: {case_data['device_type']} | 故障: {case_data['fault_symptom']} | 原因: {case_data['fault_cause']} | 方案: {case_data['solution']}"
+            
             vector = embedder.encode(search_text).tolist()
             
             # 获取当前最大ID
@@ -534,12 +746,13 @@ async def add_case(request: Request):
                         vector=vector,
                         payload={
                             "source": "user_case",
+                            "case_type": case_type,
                             "record_id": f"CASE_{case_id}",
                             "content": search_text,
                             "text": search_text,
                             "aircraft_model": case_data["device_type"],
-                            "description": case_data["fault_symptom"],
-                            "problem": case_data["fault_symptom"],
+                            "description": case_data["fault_symptom"] or case_data["maintenance_type"],
+                            "problem": case_data["fault_symptom"] or case_data["maintenance_type"],
                             "action": case_data["solution"],
                             "memory_type": "rag_chunk",
                             "memory_id": f"case_{case_id}",
@@ -550,7 +763,7 @@ async def add_case(request: Request):
                         }
                     )]
                 )
-                logger.info(f"✅ 案例已同步到 Qdrant: CASE_{case_id}")
+                logger.info(f"✅ 案例已同步到 Qdrant: CASE_{case_id} (类型: {case_type})")
         except Exception as e:
             logger.warning(f"⚠️ 案例同步到 Qdrant 失败: {e}")
         
@@ -559,13 +772,65 @@ async def add_case(request: Request):
         return JSONResponse(status_code=500, content={"error": f"添加失败: {e}"})
 
 @app.get("/api/cases")
-async def get_cases():
-    """获取案例列表"""
+async def get_cases(case_type: str = None, page: int = 1, page_size: int = 20):
+    """获取案例列表（支持分页和类型过滤）"""
     try:
-        cases = load_cases_from_db()
-        return {"success": True, "cases": cases}
+        offset = (page - 1) * page_size
+        result = load_cases_from_db(limit=page_size, offset=offset, case_type=case_type)
+        return {
+            "success": True,
+            "cases": result["cases"],
+            "total": result["total"],
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (result["total"] + page_size - 1) // page_size
+        }
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"获取案例失败: {e}"})
+
+@app.delete("/api/case/{case_id}")
+async def delete_case(case_id: int):
+    """删除案例"""
+    try:
+        # 先获取案例信息
+        case = get_case_by_id(case_id)
+        if not case:
+            return JSONResponse(status_code=404, content={"error": "案例不存在"})
+        
+        # 从 SQLite 删除
+        deleted = delete_case_from_db(case_id)
+        if not deleted:
+            return JSONResponse(status_code=404, content={"error": "案例不存在"})
+        
+        # 从 Qdrant 删除（通过 record_id 查找并删除）
+        try:
+            from qdrant_client import QdrantClient
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+            
+            qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
+            is_local = "localhost" in qdrant_url or "127.0.0.1" in qdrant_url
+            client = QdrantClient(url=qdrant_url, trust_env=not is_local)
+            
+            collections = [c.name for c in client.get_collections().collections]
+            if "aviation_knowledge_base" in collections:
+                # 查找并删除对应的向量
+                record_id = f"CASE_{case_id}"
+                client.delete(
+                    collection_name="aviation_knowledge_base",
+                    points_selector=Filter(
+                        must=[
+                            FieldCondition(key="source", match=MatchValue(value="user_case")),
+                            FieldCondition(key="record_id", match=MatchValue(value=record_id))
+                        ]
+                    )
+                )
+                logger.info(f"✅ 已从 Qdrant 删除案例: {record_id}")
+        except Exception as e:
+            logger.warning(f"⚠️ 从 Qdrant 删除案例失败: {e}")
+        
+        return {"success": True, "message": f"案例 {case_id} 已删除"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"删除失败: {e}"})
 
 @app.get("/api/stats")
 async def get_stats():
