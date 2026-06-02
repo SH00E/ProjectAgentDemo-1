@@ -22,6 +22,7 @@
     <!-- 主标签页 -->
     <nav class="tabs">
         <button class="tab active" data-tab="diagnosis">🔍 故障诊断</button>
+        <button class="tab" data-tab="maintenance">🔧 日常维护</button>
         <button class="tab" data-tab="search">📚 知识检索</button>
         <button class="tab" data-tab="case">📝 案例管理</button>
         <button class="tab" data-tab="stats">📊 系统统计</button>
@@ -74,7 +75,54 @@
         </section>
     </main>
 
-    <!-- Tab 2: 知识检索 -->
+    <!-- Tab 2: 日常维护 -->
+    <main id="tab-maintenance" class="tab-content">
+        <div class="diagnosis-layout">
+            <!-- 左侧：输入区域 -->
+            <aside class="input-panel">
+                <h2>📝 维护需求</h2>
+                <div class="form-group">
+                    <label for="maint-desc">维护描述</label>
+                    <textarea id="maint-desc" rows="8" placeholder="例如：CESSNA 172 需要进行100小时定期检查，包括更换滑油和检查起落架..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="maint-image">📷 上传照片（可选）</label>
+                    <input type="file" id="maint-image" accept="image/*">
+                    <div id="maint-image-preview" class="image-preview hidden">
+                        <img id="maint-preview-img" src="" alt="预览">
+                        <button id="maint-remove-image" class="btn-remove">✕</button>
+                    </div>
+                </div>
+                <button id="btn-maintenance" class="btn btn-maintenance" disabled>🔧 生成维护方案</button>
+            </aside>
+
+            <!-- 中间：推理过程 -->
+            <section class="cot-panel">
+                <h2>🧠 推理过程</h2>
+                <div id="maint-cot-area" class="cot-box">
+                    <em class="placeholder">等待输入维护需求...</em>
+                </div>
+            </section>
+
+            <!-- 右侧：维护依据 -->
+            <section class="evidence-panel">
+                <h2>📎 维护依据</h2>
+                <div id="maint-evidence-area" class="evidence-box">
+                    <em class="placeholder">生成方案后将显示相关维护依据...</em>
+                </div>
+            </section>
+        </div>
+
+        <!-- 工单区域 -->
+        <section class="order-section">
+            <h2>📄 维护工单</h2>
+            <div id="maint-order-area" class="order-card hidden">
+                <!-- 工单内容由 JS 动态填充 -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Tab 3: 知识检索 -->
     <main id="tab-search" class="tab-content">
         <div class="search-layout">
             <!-- 左侧：搜索区域 -->

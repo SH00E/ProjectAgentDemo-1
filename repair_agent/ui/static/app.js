@@ -30,6 +30,17 @@ const elements = {
     evidenceArea: document.getElementById('evidence-area'),
     orderArea: document.getElementById('order-area'),
 
+    // 维护
+    maintDesc: document.getElementById('maint-desc'),
+    maintImage: document.getElementById('maint-image'),
+    maintImagePreview: document.getElementById('maint-image-preview'),
+    maintPreviewImg: document.getElementById('maint-preview-img'),
+    maintRemoveImage: document.getElementById('maint-remove-image'),
+    btnMaintenance: document.getElementById('btn-maintenance'),
+    maintCotArea: document.getElementById('maint-cot-area'),
+    maintEvidenceArea: document.getElementById('maint-evidence-area'),
+    maintOrderArea: document.getElementById('maint-order-area'),
+
     // 检索
     searchQuery: document.getElementById('search-query'),
     btnSearch: document.getElementById('btn-search'),
@@ -62,6 +73,7 @@ const elements = {
 document.addEventListener('DOMContentLoaded', () => {
     initTabs();
     initDiagnosis();
+    initMaintenance();
     initSearch();
     initCase();
     initStats();
@@ -2101,4 +2113,454 @@ function escapeHtml(text) {
 
 function escapeRegex(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// ==================== 日常维护 ====================
+
+const maintenanceState = {
+    isProcessing: false,
+    analysisText: '',
+    solutionText: ''
+};
+
+function initMaintenance() {
+    // 图片预览
+    if (elements.maintImage) {
+        elements.maintImage.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    elements.maintPreviewImg.src = e.target.result;
+                    elements.maintImagePreview.classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+
+    // 移除图片
+    if (elements.maintRemoveImage) {
+        elements.maintRemoveImage.addEventListener('click', () => {
+            elements.maintImage.value = '';
+            elements.maintImagePreview.classList.add('hidden');
+            elements.maintPreviewImg.src = '';
+        });
+    }
+
+    // 维护按钮
+    if (elements.btnMaintenance) {
+        elements.btnMaintenance.addEventListener('click', startMaintenance);
+    }
+
+    // 输入框变化时启用按钮
+    if (elements.maintDesc) {
+        elements.maintDesc.addEventListener('input', () => {
+            elements.btnMaintenance.disabled = !elements.maintDesc.value.trim();
+        });
+
+        // Ctrl+Enter 快捷键
+        elements.maintDesc.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Enter') {
+                e.preventDefault();
+                if (!elements.btnMaintenance.disabled) {
+                    startMaintenance();
+                }
+            }
+        });
+    }
+}
+
+async function startMaintenance() {
+    if (maintenanceState.isProcessing) return;
+
+    const description = elements.maintDesc.value.trim();
+    if (!description) {
+        alert('请输入维护需求描述');
+        return;
+    }
+
+    // 输入校验：最少10个字符
+    if (description.length < 10) {
+        elements.maintCotArea.innerHTML = `
+            <div class="cot-step" style="color: #f59e0b;">⚠️ 输入内容过短</div>
+            <div class="cot-text">请详细描述维护需求，至少10个字符。</div>
+            <div class="cot-text" style="color: #64748b; margin-top: 8px;">
+                例如：CESSNA 172 需要进行100小时定期检查，包括更换滑油和检查起落架
+            </div>
+        `;
+        return;
+    }
+
+    maintenanceState.isProcessing = true;
+    maintenanceState.analysisText = '';
+    maintenanceState.solutionText = '';
+
+    // 更新 UI 状态
+    elements.btnMaintenance.disabled = true;
+    elements.btnMaintenance.textContent = '⏳ 处理中...';
+    elements.maintCotArea.innerHTML = '<div class="cot-step">⏳ 开始处理维护需求...</div>';
+    elements.maintOrderArea.classList.add('hidden');
+    elements.maintOrderArea.innerHTML = '';
+    elements.maintEvidenceArea.innerHTML = '<em class="placeholder">正在检索维护依据...</em>';
+
+    // 准备表单数据
+    const formData = new FormData();
+    formData.append('description', description);
+    formData.append('mode', 'maintenance');  // 关键：指定维护模式
+    if (elements.maintImage.files[0]) {
+        formData.append('image', elements.maintImage.files[0]);
+    }
+
+    try {
+        const response = await fetch('/api/diagnose', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || '请求失败');
+        }
+
+        // 使用 ReadableStream 处理 SSE
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+
+            // 处理完整的 SSE 事件
+            const lines = buffer.split('\n');
+            buffer = lines.pop(); // 保留不完整的行
+
+            let eventType = '';
+            let eventData = '';
+
+            for (const line of lines) {
+                if (line.startsWith('event: ')) {
+                    eventType = line.substring(7).trim();
+                } else if (line.startsWith('data: ')) {
+                    eventData = line.substring(6).trim();
+                    if (eventType && eventData) {
+                        handleMaintenanceSSEEvent(eventType, eventData);
+                        eventType = '';
+                        eventData = '';
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        appendToMaintCot(`<div class="cot-step" style="color: #dc2626;">❌ 错误: ${error.message}</div>`);
+    } finally {
+        maintenanceState.isProcessing = false;
+        elements.btnMaintenance.disabled = false;
+        elements.btnMaintenance.textContent = '🔧 生成维护方案';
+    }
+}
+
+function handleMaintenanceSSEEvent(eventType, dataStr) {
+    try {
+        const data = JSON.parse(dataStr);
+
+        switch (eventType) {
+            case 'step':
+                appendToMaintCot(`<div class="cot-step">${escapeHtml(data.text)}</div>`);
+                break;
+
+            case 'neo4j':
+                handleMaintenanceNeo4j(data);
+                break;
+
+            case 'rag':
+                handleMaintenanceRAG(data);
+                break;
+
+            case 'analysis':
+                handleMaintenanceAnalysis(data);
+                break;
+
+            case 'solution_text':
+                handleMaintenanceSolutionText(data);
+                break;
+
+            case 'diagnosis':
+                handleMaintenanceDiagnosis(data);
+                break;
+
+            case 'solution':
+                handleMaintenanceSolution(data);
+                break;
+
+            case 'result':
+                handleMaintenanceResult(data);
+                break;
+
+            case 'error':
+                appendToMaintCot(`<div class="cot-step" style="color: #dc2626;">❌ ${escapeHtml(data.message)}</div>`);
+                break;
+        }
+    } catch (e) {
+        console.error('解析 SSE 事件失败:', e, dataStr);
+    }
+}
+
+function handleMaintenanceNeo4j(data) {
+    if (data.results && data.results.length > 0) {
+        appendToMaintCot(`<div class="cot-step-sub">🗄️ 从知识图谱找到 ${data.total} 条相关信息</div>`);
+        
+        let html = '<div class="evidence-chain">';
+        data.results.forEach((r, i) => {
+            const typeIcon = r.type === 'Aircraft' ? '🛩️' : r.type === 'Manufacturer' ? '🏭' : '📌';
+            html += `
+                <div class="evidence-item neo4j-item">
+                    <div class="evidence-header">
+                        <span class="evidence-num">#${i + 1}</span>
+                        <span class="evidence-source">${typeIcon} ${escapeHtml(r.type)}</span>
+                    </div>
+                    <div class="evidence-content">${escapeHtml(r.name)}</div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        elements.maintEvidenceArea.innerHTML = html;
+    }
+}
+
+function handleMaintenanceRAG(data) {
+    if (data.results && data.results.length > 0) {
+        appendToMaintCot(`<div class="cot-step-sub">📚 检索到 ${data.total} 条相关维护记录</div>`);
+        
+        let html = '<div class="evidence-chain">';
+        data.results.forEach((r, i) => {
+            const sourceIcon = r.source === 'faa' ? '✈️' : r.source === 'maintnet' ? '🔧' : r.source === 'user_case' ? '📝' : '📖';
+            const relevance = r.relevance || '低';
+            const relevanceClass = relevance === '高' ? 'relevance-high' : relevance === '中' ? 'relevance-medium' : 'relevance-low';
+            const matchTypeLabel = r.match_type === 'keyword' ? '🔑' : '🧠';
+            
+            html += `
+                <div class="evidence-item">
+                    <div class="evidence-header">
+                        <span class="evidence-num">#${i + 1}</span>
+                        <span class="evidence-source">${sourceIcon} ${escapeHtml(r.source_label)}</span>
+                        <span class="relevance-badge ${relevanceClass}">${matchTypeLabel} ${relevance}</span>
+                    </div>
+                    <div class="evidence-content">${escapeHtml(r.content)}</div>
+                    <div class="evidence-details">
+                        ${r.aircraft_model ? `<span class="evidence-tag">🛩️ ${escapeHtml(r.aircraft_model)}</span>` : ''}
+                        ${r.record_id ? `<span class="evidence-tag">🆔 ${escapeHtml(r.record_id)}</span>` : ''}
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        elements.maintEvidenceArea.innerHTML = html;
+    }
+}
+
+function handleMaintenanceAnalysis(data) {
+    maintenanceState.analysisText += data.chunk;
+    
+    let analysisDiv = document.getElementById('maint-analysis');
+    if (!analysisDiv) {
+        analysisDiv = document.createElement('div');
+        analysisDiv.id = 'maint-analysis';
+        analysisDiv.innerHTML = '<div class="cot-step">🧠 需求分析</div><div class="cot-text"></div>';
+        elements.maintCotArea.appendChild(analysisDiv);
+    }
+    
+    const textDiv = analysisDiv.querySelector('.cot-text');
+    textDiv.textContent = maintenanceState.analysisText;
+    scrollToMaintBottom();
+}
+
+function handleMaintenanceSolutionText(data) {
+    maintenanceState.solutionText += data.chunk;
+    
+    let solutionDiv = document.getElementById('maint-solution');
+    if (!solutionDiv) {
+        solutionDiv = document.createElement('div');
+        solutionDiv.id = 'maint-solution';
+        solutionDiv.innerHTML = '<div class="cot-step">🔧 维护方案</div><div class="cot-text"></div>';
+        elements.maintCotArea.appendChild(solutionDiv);
+    }
+    
+    const textDiv = solutionDiv.querySelector('.cot-text');
+    textDiv.textContent = maintenanceState.solutionText;
+    scrollToMaintBottom();
+}
+
+function handleMaintenanceDiagnosis(data) {
+    let html = '<div class="cot-step">📋 维护分析结果</div>';
+    html += `<div class="cot-text">维护类型: <strong>${escapeHtml(data.fault_type)}</strong></div>`;
+    html += `<div class="cot-text">优先级: ${escapeHtml(data.urgency)}</div>`;
+    html += `<div class="cot-text">复杂度: ${escapeHtml(data.severity_level)} — ${escapeHtml(data.severity_desc)}</div>`;
+    
+    if (data.possible_causes && data.possible_causes.length > 0) {
+        html += `<div class="cot-text">维护要点: ${data.possible_causes.map(c => escapeHtml(c)).join('、')}</div>`;
+    }
+    
+    appendToMaintCot(html);
+    
+    // 显示维护依据
+    if (data.evidence_chain && data.evidence_chain.length > 0) {
+        let evidenceHtml = '<div class="evidence-chain">';
+        evidenceHtml += '<div class="evidence-title">📋 维护依据</div>';
+        data.evidence_chain.forEach((ev, i) => {
+            const sourceIcon = ev.source === 'faa' ? '✈️' : ev.source === 'maintnet' ? '🔧' : ev.source === 'user_case' ? '📝' : '📖';
+            const relevance = ev.relevance || '低';
+            const relevanceClass = relevance === '高' ? 'relevance-high' : relevance === '中' ? 'relevance-medium' : 'relevance-low';
+            
+            evidenceHtml += `
+                <div class="evidence-item">
+                    <div class="evidence-header">
+                        <span class="evidence-num">#${i + 1}</span>
+                        <span class="evidence-source">${sourceIcon} ${escapeHtml(ev.source_label)}</span>
+                        <span class="relevance-badge ${relevanceClass}">${relevance}</span>
+                    </div>
+                    <div class="evidence-content">${escapeHtml(ev.content)}</div>
+                </div>
+            `;
+        });
+        evidenceHtml += '</div>';
+        elements.maintEvidenceArea.innerHTML = evidenceHtml;
+    }
+}
+
+function handleMaintenanceSolution(data) {
+    let html = `<div class="cot-step">🔧 维护步骤（${data.repair_steps.length} 步）</div>`;
+    
+    data.repair_steps.forEach(s => {
+        html += `<div class="cot-text">${s.step}. ${escapeHtml(s.action)}</div>`;
+    });
+    
+    if (data.estimated_time) {
+        html += `<div class="cot-text" style="margin-top: 8px;">⏱️ 预计 ${escapeHtml(data.estimated_time)} | 难度: ${escapeHtml(data.difficulty)}</div>`;
+    }
+    
+    appendToMaintCot(html);
+}
+
+function handleMaintenanceResult(data) {
+    if (data.success && data.work_order) {
+        appendToMaintCot('<div class="cot-step">✅ 维护方案生成完成</div>');
+        renderMaintenanceWorkOrder(data.work_order);
+    } else if (!data.success) {
+        let html = `<div class="cot-step" style="color: #f59e0b;">⚠️ ${escapeHtml(data.error || '无法生成维护方案')}</div>`;
+        if (data.message) {
+            html += `<div class="cot-text">${escapeHtml(data.message).replace(/\n/g, '<br>')}</div>`;
+        }
+        appendToMaintCot(html);
+    }
+}
+
+function renderMaintenanceWorkOrder(order) {
+    const orderInfo = order.order_info || {};
+    const maintenance = order.maintenance || order.diagnosis || {};
+    const solution = order.solution || {};
+    
+    let html = `
+        <div class="order-header">
+            <div class="order-title">🔧 维护工单</div>
+            <div class="order-meta">
+                <span>📋 ${escapeHtml(orderInfo.order_id || 'N/A')}</span>
+                <span>📅 ${escapeHtml(orderInfo.created_at || '').substring(0, 10)}</span>
+                <span class="order-status">${escapeHtml(order.status || '待执行')}</span>
+            </div>
+        </div>
+        
+        <div class="order-section">
+            <div class="order-section-title">📝 维护需求</div>
+            <div class="order-text">${escapeHtml(order.fault_description || order.maintenance_description || '')}</div>
+        </div>
+        
+        <div class="order-section">
+            <div class="order-section-title">🔍 维护分析</div>
+            <div class="order-field"><strong>维护类型:</strong> ${escapeHtml(maintenance.fault_type || maintenance.maintenance_type || '未知')}</div>
+            <div class="order-field"><strong>复杂度:</strong> ${escapeHtml(maintenance.severity?.level || '待评估')}</div>
+            <div class="order-field"><strong>优先级:</strong> ${escapeHtml(maintenance.urgency || '中')}</div>
+        </div>
+    `;
+    
+    // 维护步骤
+    const steps = solution.repair_steps || solution.maintenance_steps || [];
+    if (steps.length > 0) {
+        html += `
+            <div class="order-section">
+                <div class="order-section-title">🔧 维护步骤</div>
+                <div class="order-steps">
+        `;
+        steps.forEach(s => {
+            html += `<div class="order-step"><span class="step-num">${s.step}</span> ${escapeHtml(s.action)}</div>`;
+        });
+        html += '</div></div>';
+    }
+    
+    // 备件/材料
+    const parts = solution.parts_required || [];
+    if (parts.length > 0) {
+        html += `
+            <div class="order-section">
+                <div class="order-section-title">📦 所需备件/材料</div>
+                <div class="order-parts">
+        `;
+        parts.forEach(p => {
+            html += `<div class="order-part">• ${escapeHtml(p.name)} ${p.quantity ? '×' + p.quantity : ''} ${p.specification ? '(' + escapeHtml(p.specification) + ')' : ''}</div>`;
+        });
+        html += '</div></div>';
+    }
+    
+    // 工具
+    const tools = solution.tools_required || [];
+    if (tools.length > 0) {
+        html += `
+            <div class="order-section">
+                <div class="order-section-title">🛠️ 所需工具</div>
+                <div class="order-tools">${tools.map(t => escapeHtml(t)).join('、')}</div>
+            </div>
+        `;
+    }
+    
+    // 安全提示
+    const warnings = solution.safety_warnings || [];
+    if (warnings.length > 0) {
+        html += `
+            <div class="order-section">
+                <div class="order-section-title">⚠️ 安全提示</div>
+                <div class="order-warnings">
+        `;
+        warnings.forEach(w => {
+            html += `<div class="order-warning">⚠️ ${escapeHtml(w)}</div>`;
+        });
+        html += '</div></div>';
+    }
+    
+    // 预计时间和难度
+    html += `
+        <div class="order-section">
+            <div class="order-section-title">📊 评估</div>
+            <div class="order-field"><strong>预计时间:</strong> ${escapeHtml(solution.estimated_time || '待评估')}</div>
+            <div class="order-field"><strong>难度等级:</strong> ${escapeHtml(solution.difficulty || '中等')}</div>
+        </div>
+    `;
+    
+    elements.maintOrderArea.innerHTML = html;
+    elements.maintOrderArea.classList.remove('hidden');
+}
+
+function appendToMaintCot(html) {
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    elements.maintCotArea.appendChild(div);
+    scrollToMaintBottom();
+}
+
+function scrollToMaintBottom() {
+    requestAnimationFrame(() => {
+        elements.maintCotArea.scrollTop = elements.maintCotArea.scrollHeight;
+    });
 }

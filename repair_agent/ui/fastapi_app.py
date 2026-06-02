@@ -231,14 +231,17 @@ def sse_event(event: str, data) -> str:
         data_str = json.dumps(data, ensure_ascii=False)
     return f"event: {event}\ndata: {data_str}\n\n"
 
-def diagnosis_stream(description: str, image_path: str = None):
-    """诊断流式生成器"""
+def diagnosis_stream(description: str, image_path: str = None, mode: str = "repair"):
+    """诊断/维护流式生成器
+    
+    mode: "repair" = 故障诊断, "maintenance" = 日常维护
+    """
     agent = agent_state["agent"]
     if agent is None:
         yield sse_event("error", {"message": "系统未就绪，请稍候"})
         return
 
-    for kind, data in agent.process_request_stream(description, image_path):
+    for kind, data in agent.process_request_stream(description, image_path, mode=mode):
         if kind == "step":
             yield sse_event("step", {"text": data})
         elif kind == "neo4j":
@@ -391,9 +394,13 @@ async def init_agent():
 @app.post("/api/diagnose")
 async def diagnose(
     description: str = Form(...),
-    image: UploadFile = File(None)
+    image: UploadFile = File(None),
+    mode: str = Form("repair")
 ):
-    """提交诊断请求，返回 SSE 流"""
+    """提交诊断/维护请求，返回 SSE 流
+    
+    mode: "repair" = 故障诊断, "maintenance" = 日常维护
+    """
     if agent_state["agent"] is None:
         return JSONResponse(
             status_code=503,
@@ -403,7 +410,7 @@ async def diagnose(
     if not description.strip():
         return JSONResponse(
             status_code=400,
-            content={"error": "请输入故障描述"}
+            content={"error": "请输入描述"}
         )
 
     # 处理图片
@@ -431,7 +438,7 @@ async def diagnose(
             logger.warning(f"图片保存失败: {e}")
 
     return StreamingResponse(
-        diagnosis_stream(description, image_path),
+        diagnosis_stream(description, image_path, mode),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

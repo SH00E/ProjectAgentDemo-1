@@ -213,9 +213,14 @@ class RepairAgent:
                 "error": str(e)
             }
     
-    def process_request_stream(self, description: str, image_path: str = None):
+    def process_request_stream(self, description: str, image_path: str = None, mode: str = "repair"):
         """
         流式处理用户请求 - 逐步 yield 中间过程和最终结果
+        
+        Args:
+            description: 故障/维护描述
+            image_path: 图片路径（可选）
+            mode: "repair" = 故障诊断, "maintenance" = 日常维护
         
         Yields:
             ("step", "步骤描述")
@@ -225,82 +230,148 @@ class RepairAgent:
             ("result", final_dict) — 最终完整结果
         """
         try:
-            # 流式诊断
-            diagnosis_result = None
-            for kind, data in self.diagnosis_engine.diagnose_with_stream(description, image_path):
-                if kind == "diagnosis":
-                    diagnosis_result = data
-                else:
-                    yield (kind, data)
-            
-            if not diagnosis_result or not diagnosis_result.get("success"):
-                yield ("result", {"success": False, "error": "诊断失败"})
-                return
-            
-            # 流式推荐方案
-            solution = None
-            for kind, data in self.diagnosis_engine.recommend_solution_stream(
-                diagnosis_result.get("diagnosis", {})
-            ):
-                if kind == "solution":
-                    solution = data
-                else:
-                    yield (kind, data)
-            
-            # 生成工单（纯模板，很快）
-            yield ("step", "📋 正在生成维修工单...")
-            work_order = self.work_order_generator.generate(
-                description=description,
-                diagnosis=diagnosis_result.get("diagnosis", {}),
-                solution=solution,
-                severity=diagnosis_result.get("severity")
-            )
-            
-            # 记录（异步，不阻塞）
-            try:
-                self._record_process(description, diagnosis_result, work_order)
-            except Exception as e:
-                logger.warning(f"记录失败: {e}")
-            
-            order_text = self.work_order_generator.format_order_text(work_order)
-            
-            yield ("result", {
-                "success": True,
-                "description": description,
-                "diagnosis": diagnosis_result,
-                "solution": solution,
-                "work_order": work_order,
-                "work_order_text": order_text
-            })
+            # 根据模式选择处理流程
+            if mode == "maintenance":
+                yield from self._process_maintenance_stream(description, image_path)
+            else:
+                yield from self._process_repair_stream(description, image_path)
             
         except Exception as e:
             logger.error(f"❌ 处理请求失败: {e}")
             yield ("result", {"success": False, "error": str(e)})
     
+    def _process_repair_stream(self, description: str, image_path: str = None):
+        """故障诊断流程"""
+        # 流式诊断
+        diagnosis_result = None
+        for kind, data in self.diagnosis_engine.diagnose_with_stream(description, image_path):
+            if kind == "diagnosis":
+                diagnosis_result = data
+            else:
+                yield (kind, data)
+        
+        if not diagnosis_result or not diagnosis_result.get("success"):
+            yield ("result", {"success": False, "error": "诊断失败"})
+            return
+        
+        # 流式推荐方案
+        solution = None
+        for kind, data in self.diagnosis_engine.recommend_solution_stream(
+            diagnosis_result.get("diagnosis", {})
+        ):
+            if kind == "solution":
+                solution = data
+            else:
+                yield (kind, data)
+        
+        # 生成工单
+        yield ("step", "📋 正在生成维修工单...")
+        work_order = self.work_order_generator.generate(
+            description=description,
+            diagnosis=diagnosis_result.get("diagnosis", {}),
+            solution=solution,
+            severity=diagnosis_result.get("severity")
+        )
+        
+        # 记录
+        try:
+            self._record_process(description, diagnosis_result, work_order, mode="repair")
+        except Exception as e:
+            logger.warning(f"记录失败: {e}")
+        
+        order_text = self.work_order_generator.format_order_text(work_order)
+        
+        yield ("result", {
+            "success": True,
+            "description": description,
+            "diagnosis": diagnosis_result,
+            "solution": solution,
+            "work_order": work_order,
+            "work_order_text": order_text
+        })
+    
+    def _process_maintenance_stream(self, description: str, image_path: str = None):
+        """日常维护流程"""
+        # 流式诊断（复用诊断引擎，但上下文不同）
+        diagnosis_result = None
+        for kind, data in self.diagnosis_engine.diagnose_with_stream(description, image_path, mode="maintenance"):
+            if kind == "diagnosis":
+                diagnosis_result = data
+            else:
+                yield (kind, data)
+        
+        if not diagnosis_result or not diagnosis_result.get("success"):
+            yield ("result", {"success": False, "error": "维护分析失败"})
+            return
+        
+        # 流式推荐方案
+        solution = None
+        for kind, data in self.diagnosis_engine.recommend_solution_stream(
+            diagnosis_result.get("diagnosis", {}),
+            mode="maintenance"
+        ):
+            if kind == "solution":
+                solution = data
+            else:
+                yield (kind, data)
+        
+        # 生成维护工单
+        yield ("step", "📋 正在生成维护工单...")
+        work_order = self.work_order_generator.generate(
+            description=description,
+            diagnosis=diagnosis_result.get("diagnosis", {}),
+            solution=solution,
+            severity=diagnosis_result.get("severity"),
+            mode="maintenance"
+        )
+        
+        # 记录
+        try:
+            self._record_process(description, diagnosis_result, work_order, mode="maintenance")
+        except Exception as e:
+            logger.warning(f"记录失败: {e}")
+        
+        order_text = self.work_order_generator.format_order_text(work_order, mode="maintenance")
+        
+        yield ("result", {
+            "success": True,
+            "description": description,
+            "diagnosis": diagnosis_result,
+            "solution": solution,
+            "work_order": work_order,
+            "work_order_text": order_text
+        })
+    
     def _record_process(self, description: str, diagnosis: Dict, 
-                        work_order: Dict):
+                        work_order: Dict, mode: str = "repair"):
         """记录处理过程"""
         try:
             order_id = work_order.get("order_info", {}).get("order_id", "N/A")
             fault_type = diagnosis.get("diagnosis", {}).get("fault_type", "未知")
             severity = diagnosis.get("severity", {}).get("level", "未知")
             
-            content = f"故障诊断记录 | 工单: {order_id} | 故障类型: {fault_type} | 损伤等级: {severity} | 描述: {description[:80]}"
+            if mode == "maintenance":
+                content = f"维护记录 | 工单: {order_id} | 维护类型: {fault_type} | 复杂度: {severity} | 描述: {description[:80]}"
+                topic = "maintenance_history"
+            else:
+                content = f"故障诊断记录 | 工单: {order_id} | 故障类型: {fault_type} | 损伤等级: {severity} | 描述: {description[:80]}"
+                topic = "diagnosis_history"
             
             self.memory_tool.run({
                 "action": "add",
                 "content": content,
                 "memory_type": "episodic",
                 "importance": 0.9,
-                "topic": "diagnosis_history",
+                "topic": topic,
                 "metadata": {
                     "order_id": order_id,
                     "fault_type": fault_type,
                     "severity": severity,
-                    "description": description[:200]
+                    "description": description[:200],
+                    "mode": mode
                 }
             })
-            logger.info(f"✅ 诊断记录已保存: {order_id}")
+            logger.info(f"✅ 记录已保存: {order_id} (模式: {mode})")
         except Exception as e:
             logger.warning(f"⚠️ 记录处理过程失败: {e}")
     

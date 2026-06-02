@@ -508,9 +508,14 @@ class RepairDiagnosisEngine:
             logger.warning(f"⚠️ 图片分析失败: {e}")
             return f"（图片分析失败: {str(e)}）"
     
-    def diagnose_with_stream(self, description: str, image_path: str = None):
+    def diagnose_with_stream(self, description: str, image_path: str = None, mode: str = "repair"):
         """
         流式诊断 - 循环检索流程
+        
+        Args:
+            description: 故障/维护描述
+            image_path: 图片路径（可选）
+            mode: "repair" = 故障诊断, "maintenance" = 日常维护
         
         流程：
         1. 提取关键词
@@ -531,6 +536,9 @@ class RepairDiagnosisEngine:
         all_evidence = []  # 所有证据
         image_analysis = ""
         image_stored = False
+        
+        # 根据模式调整提示
+        mode_label = "维护" if mode == "maintenance" else "维修"
         
         # 处理照片
         if isinstance(image_path, str) and image_path and os.path.exists(image_path):
@@ -773,22 +781,49 @@ class RepairDiagnosisEngine:
                 unique.append(e)
         return unique
     
-    def recommend_solution_stream(self, diagnosis_result: Dict):
+    def recommend_solution_stream(self, diagnosis_result: Dict, mode: str = "repair"):
         """
-        流式推荐维修方案
+        流式推荐维修/维护方案
+        
+        Args:
+            diagnosis_result: 诊断结果
+            mode: "repair" = 维修方案, "maintenance" = 维护方案
         
         Yields:
             ("step", "步骤描述")
             ("solution_text", chunk) — LLM流式方案文本
             ("solution", final_solution) — 最终结构化方案
         """
-        yield ("step", "🔧 正在生成维修方案...")
-        
-        fault_type = diagnosis_result.get("fault_type", "未知")
-        causes = diagnosis_result.get("possible_causes", [])
-        recommended = diagnosis_result.get("recommended_actions", [])
-        
-        solution_prompt = f"""你是一个专业的航空维修工程师。请根据以下诊断结果，提供详细的维修方案。
+        if mode == "maintenance":
+            yield ("step", "🔧 正在生成维护方案...")
+            
+            fault_type = diagnosis_result.get("fault_type", "未知")
+            causes = diagnosis_result.get("possible_causes", [])
+            recommended = diagnosis_result.get("recommended_actions", [])
+            
+            solution_prompt = f"""你是一个专业的航空维护工程师。请根据以下维护需求分析，提供详细的维护方案。
+
+【维护类型】{fault_type}
+【维护要点】{', '.join(causes)}
+【建议操作】{', '.join(recommended)}
+
+请按以下格式输出：
+1. 维护步骤（按顺序列出，参考AMM手册）
+2. 所需工具
+3. 所需材料/备件（含件号，如有）
+4. 安全注意事项
+5. 预计维护时间和难度
+6. 维护标准/验收标准
+
+请用简洁的中文回答。"""
+        else:
+            yield ("step", "🔧 正在生成维修方案...")
+            
+            fault_type = diagnosis_result.get("fault_type", "未知")
+            causes = diagnosis_result.get("possible_causes", [])
+            recommended = diagnosis_result.get("recommended_actions", [])
+            
+            solution_prompt = f"""你是一个专业的航空维修工程师。请根据以下诊断结果，提供详细的维修方案。
 
 【故障类型】{fault_type}
 【可能原因】{', '.join(causes)}
