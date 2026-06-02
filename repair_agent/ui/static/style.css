@@ -229,6 +229,36 @@ h2 {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
+/* 输入框头部（含演示按钮） */
+.input-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.input-header label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #374151;
+}
+
+.btn-demo-inline {
+    padding: 4px 10px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-demo-inline:hover {
+    background: #e2e8f0;
+    color: #1e293b;
+}
+
 .form-group {
     margin-bottom: 16px;
 }

@@ -16,7 +16,6 @@
         </div>
         <div class="header-actions">
             <a href="/dashboard" target="_blank" class="btn-dashboard">📊 数据大屏</a>
-            <button id="btn-demo" class="btn-demo" title="演示模式">🎬 演示</button>
             <div id="status-bar" class="status-bar status-loading">
                 ⏳ 正在初始化系统...
             </div>
@@ -41,7 +40,10 @@
             <aside class="input-panel">
                 <h2>📝 输入</h2>
                 <div class="form-group">
-                    <label for="fault-desc">故障描述</label>
+                    <div class="input-header">
+                        <label for="fault-desc">故障描述</label>
+                        <button class="btn-demo-inline" onclick="fillDiagnosisDemo()">演示：填充示例</button>
+                    </div>
                     <textarea id="fault-desc" rows="8" placeholder="例如：某型导弹在发射测试中制导系统信号丢失，无法锁定目标...&#10;或：导弹发射车液压系统压力异常，发射架无法正常起竖..."></textarea>
                 </div>
                 <div class="form-group">
@@ -88,7 +90,10 @@
             <aside class="input-panel">
                 <h2>📝 维护需求</h2>
                 <div class="form-group">
-                    <label for="maint-desc">维护描述</label>
+                    <div class="input-header">
+                        <label for="maint-desc">维护描述</label>
+                        <button class="btn-demo-inline" onclick="fillMaintenanceDemo()">演示：填充示例</button>
+                    </div>
                     <textarea id="maint-desc" rows="8" placeholder="例如：某型导弹需要进行发射前定期检查，包括制导系统校准和发动机检测...&#10;或：导弹发射车液压系统需要更换密封件和补充液压油...&#10;或：导弹弹翼舵机如何更换？"></textarea>
                 </div>
                 <div class="form-group">
@@ -135,6 +140,10 @@
             <div class="search-main">
                 <h2>📚 检索保障知识库</h2>
                 <div class="search-form">
+                    <div class="input-header">
+                        <label for="search-query">搜索关键词</label>
+                        <button class="btn-demo-inline" onclick="fillSearchDemo()">演示：填充示例</button>
+                    </div>
                     <input type="text" id="search-query" placeholder="例如：发动机推力下降原因、制导系统故障排除" />
                     <button id="btn-search" class="btn btn-primary">🔍 检索</button>
                 </div>
@@ -178,6 +187,10 @@
                 <h2>💡 智能问答</h2>
                 <p class="qa-desc">输入专业问题，系统将逐步解析关键词并深入解释</p>
                 <div class="qa-form">
+                    <div class="input-header">
+                        <label for="qa-question">问题</label>
+                        <button class="btn-demo-inline" onclick="fillQADemo()">演示：填充示例</button>
+                    </div>
                     <textarea id="qa-question" rows="4" placeholder="例如：为什么低温下锂离子电池会导致能力下降？&#10;或：惯性导航原理是什么？"></textarea>
                     <button id="btn-ask" class="btn btn-primary">💡 提问</button>
                 </div>

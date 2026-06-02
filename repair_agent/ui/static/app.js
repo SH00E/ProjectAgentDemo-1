@@ -101,7 +101,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initFeedback();
     initStats();
     initDetailModal();
-    initDemoMode();
     checkStatus();
     loadSearchHistory();
 });
@@ -3289,169 +3288,39 @@ function renderRecentCases(cases) {
     container.innerHTML = html;
 }
 
-// ==================== 演示模式 ====================
+// ==================== 页面内演示功能 ====================
 
-const demoState = {
-    isRunning: false,
-    demos: [
-        {
-            name: '导弹制导系统故障诊断',
-            type: 'diagnosis',
-            description: '某型导弹在发射测试中制导系统信号丢失，无法锁定目标。初步检查发现惯性导航单元输出异常，陀螺仪漂移超标。',
-            autoStart: true
-        },
-        {
-            name: '导弹发射车液压维护',
-            type: 'maintenance',
-            description: '导弹发射车液压系统需要进行季度维护保养，包括更换液压油、检查密封件状态、测试系统压力。',
-            autoStart: false
-        },
-        {
-            name: '惯性导航原理问答',
-            type: 'qa',
-            question: '惯性导航原理是什么',
-            autoStart: false
-        }
-    ],
-    currentIndex: 0
-};
-
-function initDemoMode() {
-    const btnDemo = document.getElementById('btn-demo');
-    if (btnDemo) {
-        btnDemo.addEventListener('click', startDemo);
-    }
-}
-
-async function startDemo() {
-    if (demoState.isRunning) return;
-    
-    const btnDemo = document.getElementById('btn-demo');
-    demoState.isRunning = true;
-    btnDemo.classList.add('running');
-    btnDemo.textContent = '⏳ 演示中...';
-    
-    try {
-        for (let i = 0; i < demoState.demos.length; i++) {
-            demoState.currentIndex = i;
-            const demo = demoState.demos[i];
-            
-            // 显示演示提示
-            showDemoNotification(`🎬 演示 ${i + 1}/${demoState.demos.length}: ${demo.name}`);
-            
-            // 切换到对应标签页
-            switchToTab(demo.type);
-            
-            // 等待一下让用户看到
-            await sleep(1000);
-            
-            // 执行演示
-            if (demo.type === 'diagnosis') {
-                await runDiagnosisDemo(demo.description);
-            } else if (demo.type === 'maintenance') {
-                await runMaintenanceDemo(demo.description);
-            } else if (demo.type === 'qa') {
-                await runQADemo(demo.question);
-            }
-            
-            // 等待完成
-            await sleep(3000);
-        }
-        
-        showDemoNotification('✅ 演示完成！');
-    } catch (e) {
-        console.error('演示失败:', e);
-        showDemoNotification('❌ 演示中断');
-    } finally {
-        demoState.isRunning = false;
-        btnDemo.classList.remove('running');
-        btnDemo.textContent = '🎬 演示';
-    }
-}
-
-async function runDiagnosisDemo(description) {
+function fillDiagnosisDemo() {
     const textarea = document.getElementById('fault-desc');
-    const btn = document.getElementById('btn-diagnose');
-    
-    if (textarea && btn) {
-        // 模拟打字效果
-        textarea.value = '';
-        for (let i = 0; i < description.length; i++) {
-            textarea.value += description[i];
-            await sleep(20);
-        }
-        
-        // 触发输入事件
+    if (textarea) {
+        textarea.value = '某型导弹在发射测试中制导系统信号丢失，无法锁定目标。初步检查发现惯性导航单元输出异常，陀螺仪漂移超标。';
         textarea.dispatchEvent(new Event('input'));
-        await sleep(500);
-        
-        // 点击诊断按钮
-        btn.click();
+        textarea.focus();
     }
 }
 
-async function runMaintenanceDemo(description) {
+function fillMaintenanceDemo() {
     const textarea = document.getElementById('maint-desc');
-    const btn = document.getElementById('btn-maintenance');
-    
-    if (textarea && btn) {
-        textarea.value = '';
-        for (let i = 0; i < description.length; i++) {
-            textarea.value += description[i];
-            await sleep(20);
-        }
-        
+    if (textarea) {
+        textarea.value = '导弹发射车液压系统需要进行季度维护保养，包括更换液压油、检查密封件状态、测试系统压力。';
         textarea.dispatchEvent(new Event('input'));
-        await sleep(500);
-        
-        btn.click();
+        textarea.focus();
     }
 }
 
-async function runQADemo(question) {
+function fillQADemo() {
     const textarea = document.getElementById('qa-question');
-    const btn = document.getElementById('btn-ask');
-    
-    if (textarea && btn) {
-        textarea.value = '';
-        for (let i = 0; i < question.length; i++) {
-            textarea.value += question[i];
-            await sleep(50);
-        }
-        
+    if (textarea) {
+        textarea.value = '惯性导航原理是什么';
         textarea.dispatchEvent(new Event('input'));
-        await sleep(500);
-        
-        btn.click();
+        textarea.focus();
     }
 }
 
-function switchToTab(tabName) {
-    const tab = document.querySelector(`.tab[data-tab="${tabName}"]`);
-    if (tab) {
-        tab.click();
+function fillSearchDemo() {
+    const input = document.getElementById('search-query');
+    if (input) {
+        input.value = '制导系统故障';
+        input.focus();
     }
-}
-
-function showDemoNotification(message) {
-    // 移除旧通知
-    const old = document.getElementById('demo-notification');
-    if (old) old.remove();
-    
-    const notification = document.createElement('div');
-    notification.id = 'demo-notification';
-    notification.className = 'demo-notification';
-    notification.textContent = message;
-    document.body.appendChild(notification);
-    
-    // 3秒后自动消失
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.remove();
-        }
-    }, 3000);
-}
-
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
 }
