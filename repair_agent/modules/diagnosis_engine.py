@@ -127,18 +127,30 @@ class RepairDiagnosisEngine:
             
             # ==================== 1. 关键词搜索（Qdrant）====================
             try:
-                keyword_filter = Filter(
-                    should=[
-                        FieldCondition(key="content", match=MatchText(text=query)),
-                        FieldCondition(key="text", match=MatchText(text=query)),
-                        FieldCondition(key="description", match=MatchText(text=query)),
-                        FieldCondition(key="description_zh", match=MatchText(text=query)),
-                        FieldCondition(key="problem", match=MatchText(text=query)),
-                        FieldCondition(key="problem_zh", match=MatchText(text=query)),
-                        FieldCondition(key="action", match=MatchText(text=query)),
-                        FieldCondition(key="action_zh", match=MatchText(text=query)),
-                    ]
-                )
+                # 拆分查询词，支持部分匹配
+                query_parts = [query]  # 完整查询
+                # 按空格、逗号、顿号拆分
+                for sep in [' ', ',', '，', '、', '/', '|']:
+                    for part in query.split(sep):
+                        part = part.strip()
+                        if part and len(part) >= 2 and part not in query_parts:
+                            query_parts.append(part)
+                
+                # 使用 MatchText 进行模糊匹配，支持多个查询词
+                keyword_conditions = []
+                for q in query_parts:
+                    keyword_conditions.extend([
+                        FieldCondition(key="content", match=MatchText(text=q)),
+                        FieldCondition(key="text", match=MatchText(text=q)),
+                        FieldCondition(key="description", match=MatchText(text=q)),
+                        FieldCondition(key="description_zh", match=MatchText(text=q)),
+                        FieldCondition(key="problem", match=MatchText(text=q)),
+                        FieldCondition(key="problem_zh", match=MatchText(text=q)),
+                        FieldCondition(key="action", match=MatchText(text=q)),
+                        FieldCondition(key="action_zh", match=MatchText(text=q)),
+                    ])
+                
+                keyword_filter = Filter(should=keyword_conditions)
                 
                 keyword_scroll = client.scroll(
                     collection_name=collection_name,
