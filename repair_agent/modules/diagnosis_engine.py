@@ -72,9 +72,6 @@ class RepairDiagnosisEngine:
             # 步骤4: 评估损伤等级
             severity = self.assess_severity(diagnosis_result)
             
-            # 步骤5: 记录诊断过程到记忆
-            self._record_diagnosis(description, diagnosis_result, severity)
-            
             return {
                 "success": True,
                 "description": description,
@@ -789,9 +786,6 @@ class RepairDiagnosisEngine:
         
         # 损伤评估
         severity = self.assess_severity(diagnosis_result)
-        
-        # 记录
-        self._record_diagnosis(description, diagnosis_result, severity)
         
         # 去重证据
         unique_evidence = self._deduplicate_evidence(all_evidence)
