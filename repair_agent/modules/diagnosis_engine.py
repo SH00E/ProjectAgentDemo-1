@@ -42,20 +42,21 @@ class RepairDiagnosisEngine:
     
     # ==================== 核心诊断功能 ====================
     
-    def diagnose(self, description: str, image_path: str = None) -> Dict[str, Any]:
+    def diagnose(self, description: str, image_path: str = None, mode: str = "repair") -> Dict[str, Any]:
         """
-        故障诊断
+        故障诊断/维护评估
         
         Args:
-            description: 故障描述
+            description: 故障/维护描述
             image_path: 现场照片路径 (可选)
+            mode: "repair" = 故障诊断, "maintenance" = 日常维护
             
         Returns:
             Dict: 诊断结果
         """
         try:
             # 步骤1: 检索相关知识
-            knowledge_results = self._retrieve_knowledge(description)
+            knowledge_results = self._retrieve_knowledge(description, mode)
             
             # 步骤2: 分析照片（如果有且视觉模型可用）
             image_analysis = ""
@@ -280,8 +281,8 @@ class RepairDiagnosisEngine:
         except Exception as e:
             logger.warning(f"向量搜索失败({collection_name}): {e}")
 
-    def _retrieve_knowledge(self, query: str) -> List[Dict]:
-        """检索相关知识 - 搜索所有集合，关键词+向量混合"""
+    def _retrieve_knowledge(self, query: str, mode: str = "repair") -> List[Dict]:
+        """检索相关知识 - 搜索所有集合，关键词+向量混合，按模式过滤案例类型"""
         try:
             from qdrant_client import QdrantClient
             from hello_agents.memory.embedding import get_text_embedder
@@ -290,6 +291,9 @@ class RepairDiagnosisEngine:
             is_local = "localhost" in qdrant_url or "127.0.0.1" in qdrant_url
             client = QdrantClient(url=qdrant_url, trust_env=not is_local)
             embedder = get_text_embedder()
+
+            # 确定要排除的案例类型
+            exclude_case_type = "maintenance" if mode == "repair" else "repair"
 
             # 搜索所有 Qdrant 集合
             collections = [c.name for c in client.get_collections().collections]
@@ -302,6 +306,21 @@ class RepairDiagnosisEngine:
                                             keyword_results, vector_results)
                 except Exception as e:
                     logger.warning(f"搜索集合失败({col_name}): {e}")
+
+            # 过滤掉不匹配模式的案例类型
+            filtered_out = 0
+            for rid in list(keyword_results.keys()):
+                ct = keyword_results[rid].get("case_type", "")
+                if ct == exclude_case_type:
+                    del keyword_results[rid]
+                    filtered_out += 1
+            for rid in list(vector_results.keys()):
+                ct = vector_results[rid].get("case_type", "")
+                if ct == exclude_case_type:
+                    del vector_results[rid]
+                    filtered_out += 1
+            if filtered_out > 0:
+                logger.info(f"🗂️ 按模式 '{mode}' 过滤掉 {filtered_out} 条 '{exclude_case_type}' 类型案例")
 
             logger.info(f"Qdrant汇总: 关键词 {len(keyword_results)} 条, 向量 {len(vector_results)} 条")
 
@@ -334,7 +353,10 @@ class RepairDiagnosisEngine:
                                   OR maintenance_standard LIKE ?)''')
                         sql_params.extend([like_param] * 10)
                     if sql_conditions:
-                        cursor.execute('SELECT DISTINCT * FROM cases WHERE ' + ' OR '.join(sql_conditions), sql_params)
+                        # 按模式过滤案例类型
+                        sql = 'SELECT DISTINCT * FROM cases WHERE (' + ' OR '.join(sql_conditions) + ') AND case_type != ?'
+                        sql_params.append(exclude_case_type)
+                        cursor.execute(sql, sql_params)
                     rows = cursor.fetchall()
                     conn.close()
                     for row in rows:
@@ -542,26 +564,28 @@ class RepairDiagnosisEngine:
             logger.warning(f"⚠️ Neo4j 查询失败: {e}")
             return []
     
-    def _extract_keywords(self, description: str) -> List[str]:
+    def _extract_keywords(self, description: str, mode: str = "repair") -> List[str]:
         """
-        从故障描述中提取关键词
+        从故障/维护描述中提取关键词
         
         Args:
-            description: 故障描述
+            description: 故障/维护描述
+            mode: "repair" = 故障诊断, "maintenance" = 日常维护
             
         Returns:
             List[str]: 关键词列表
         """
         try:
-            user_prompt = fmt_prompt("extract_keywords", "user", description=description)
+            key_suffix = "_maintenance" if mode == "maintenance" else ""
+            user_prompt = fmt_prompt("extract_keywords", f"user{key_suffix}", description=description)
             messages = [
-                {"role": "system", "content": fmt_prompt("extract_keywords", "system")},
+                {"role": "system", "content": fmt_prompt("extract_keywords", f"system{key_suffix}")},
                 {"role": "user", "content": user_prompt}
             ]
             
             response = self.llm.invoke(messages)
             keywords = [kw.strip() for kw in response.split(",") if kw.strip() and kw.strip() != "无"]
-            return keywords[:10] if keywords else ["故障诊断"]  # 最多10个关键词，至少返回一个
+            return keywords[:10] if keywords else ["维护保养"]  # 最多10个关键词，至少返回一个
             
         except Exception as e:
             logger.warning(f"⚠️ 关键词提取失败: {e}")
@@ -678,7 +702,7 @@ class RepairDiagnosisEngine:
         yield ("step", "🔍 第1轮：提取关键信息...")
         
         # 提取关键词
-        keywords = self._extract_keywords(description)
+        keywords = self._extract_keywords(description, mode)
         yield ("step", f"📝 提取到关键词: {', '.join(keywords[:5])}")
         
         # 查询 Neo4j
@@ -697,7 +721,7 @@ class RepairDiagnosisEngine:
         
         # 查询 Qdrant
         yield ("step", "📚 正在查询向量知识库 (Qdrant)...")
-        qdrant_results = self._retrieve_knowledge(description)
+        qdrant_results = self._retrieve_knowledge(description, mode)
         if qdrant_results:
             yield ("rag", qdrant_results)
             all_evidence.extend(qdrant_results[:20])
@@ -727,7 +751,7 @@ class RepairDiagnosisEngine:
         yield ("step", "🧠 正在分析第一轮检索结果...")
         
         # 构建上下文
-        context = self._build_context(description, neo4j_results, qdrant_results, image_analysis)
+        context = self._build_context(description, neo4j_results, qdrant_results, image_analysis, mode)
         
         # LLM 判断是否需要更多信息
         need_more = False
@@ -740,7 +764,7 @@ class RepairDiagnosisEngine:
             yield ("step", "🔍 第2轮：扩大搜索范围...")
             
             # 使用更宽泛的关键词
-            broader_keywords = self._extract_broader_keywords(description, keywords)
+            broader_keywords = self._extract_broader_keywords(description, keywords, mode)
             if broader_keywords:
                 yield ("step", f"📝 扩展关键词: {', '.join(broader_keywords[:5])}")
                 
@@ -759,7 +783,7 @@ class RepairDiagnosisEngine:
                 
                 # 再次查询 Qdrant（使用不同角度的查询）
                 broader_query = f"{description} {' '.join(broader_keywords[:3])}"
-                qdrant_results_2 = self._retrieve_knowledge(broader_query)
+                qdrant_results_2 = self._retrieve_knowledge(broader_query, mode)
                 if qdrant_results_2:
                     yield ("rag", qdrant_results_2)
                     all_evidence.extend(qdrant_results_2[:10])
@@ -769,9 +793,10 @@ class RepairDiagnosisEngine:
         yield ("step", "🧠 正在综合分析所有证据...")
         
         # 流式输出分析过程
-        analysis_prompt = self._build_analysis_prompt(description, all_evidence, image_analysis)
+        analysis_prompt = self._build_analysis_prompt(description, all_evidence, image_analysis, mode)
+        sys_key = f"system{'_maintenance' if mode == 'maintenance' else ''}"
         messages = [
-            {"role": "system", "content": fmt_prompt("analysis", "system")},
+            {"role": "system", "content": fmt_prompt("analysis", sys_key)},
             {"role": "user", "content": analysis_prompt}
         ]
         
@@ -782,7 +807,7 @@ class RepairDiagnosisEngine:
         
         # 结构化诊断
         yield ("step", "📋 正在生成结构化诊断...")
-        diagnosis_result = self._analyze_with_llm(description, all_evidence, image_analysis)
+        diagnosis_result = self._analyze_with_llm(description, all_evidence, image_analysis, mode)
         
         # 损伤评估
         severity = self.assess_severity(diagnosis_result)
@@ -804,14 +829,15 @@ class RepairDiagnosisEngine:
         }
         yield ("diagnosis", final)
     
-    def _extract_broader_keywords(self, description: str, original_keywords: List[str]) -> List[str]:
+    def _extract_broader_keywords(self, description: str, original_keywords: List[str], mode: str = "repair") -> List[str]:
         """提取更宽泛的关键词"""
         try:
-            user_prompt = fmt_prompt("extract_broader_keywords", "user",
+            key_suffix = "_maintenance" if mode == "maintenance" else ""
+            user_prompt = fmt_prompt("extract_broader_keywords", f"user{key_suffix}",
                                      description=description,
                                      keywords=', '.join(original_keywords))
             messages = [
-                {"role": "system", "content": fmt_prompt("extract_broader_keywords", "system")},
+                {"role": "system", "content": fmt_prompt("extract_broader_keywords", f"system{key_suffix}")},
                 {"role": "user", "content": user_prompt}
             ]
             
@@ -826,9 +852,10 @@ class RepairDiagnosisEngine:
             return []
     
     def _build_context(self, description: str, neo4j_results: List, 
-                       qdrant_results: List, image_analysis: str) -> str:
+                       qdrant_results: List, image_analysis: str, mode: str = "repair") -> str:
         """构建上下文"""
-        context = f"【故障描述】\n{description}\n"
+        desc_label = "维护需求" if mode == "maintenance" else "故障描述"
+        context = f"【{desc_label}】\n{description}\n"
         
         if neo4j_results:
             context += "\n\n【知识图谱信息】\n"
@@ -846,7 +873,7 @@ class RepairDiagnosisEngine:
         
         return context
     
-    def _build_analysis_prompt(self, description: str, evidence: List, image_analysis: str) -> str:
+    def _build_analysis_prompt(self, description: str, evidence: List, image_analysis: str, mode: str = "repair") -> str:
         """构建分析提示词"""
         evidence_context = ""
         if evidence:
@@ -860,7 +887,8 @@ class RepairDiagnosisEngine:
         if image_analysis:
             image_context = f"\n\n【照片分析】\n{image_analysis}\n"
         
-        return fmt_prompt("analysis", "user",
+        key_suffix = "_maintenance" if mode == "maintenance" else ""
+        return fmt_prompt("analysis", f"user{key_suffix}",
                           description=description,
                           evidence_context=evidence_context,
                           image_context=image_context)
@@ -924,8 +952,9 @@ class RepairDiagnosisEngine:
     
     def _analyze_with_llm(self, description: str, 
                           knowledge: List[Dict],
-                          image_analysis: str = "") -> Dict[str, Any]:
-        """使用LLM进行诊断分析"""
+                          image_analysis: str = "",
+                          mode: str = "repair") -> Dict[str, Any]:
+        """使用LLM进行诊断/维护分析"""
         try:
             # 构建知识上下文
             knowledge_context = ""
@@ -940,9 +969,10 @@ class RepairDiagnosisEngine:
             if image_analysis:
                 image_context = f"\n\n【现场照片分析】\n{image_analysis}\n"
             
-            # 构建诊断提示词
-            system_prompt = fmt_prompt("diagnosis_structured", "system")
-            user_prompt = fmt_prompt("diagnosis_structured", "user",
+            # 构建诊断/维护提示词
+            key_suffix = "_maintenance" if mode == "maintenance" else ""
+            system_prompt = fmt_prompt("diagnosis_structured", f"system{key_suffix}")
+            user_prompt = fmt_prompt("diagnosis_structured", f"user{key_suffix}",
                                      description=description,
                                      knowledge_context=knowledge_context,
                                      image_context=image_context)
