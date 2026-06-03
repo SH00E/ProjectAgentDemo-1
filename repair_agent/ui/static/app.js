@@ -373,14 +373,12 @@ function handleRAG(data) {
             const sourceIcon = r.source === 'faa' ? '✈️' : r.source === 'maintnet' ? '🔧' : '📖';
             const relevance = r.relevance || '低';
             const relevanceClass = relevance === '高' ? 'relevance-high' : relevance === '中' ? 'relevance-medium' : 'relevance-low';
-            const matchTypeLabel = r.match_type === 'keyword' ? '🔑' : '🧠';
             
             // 存储数据到全局变量以便点击时使用
             const evidenceData = {
                 title: `证据 #${i + 1}`,
                 source: r.source_label,
                 relevance: relevance,
-                matchType: r.match_type,
                 aircraftModel: r.aircraft_model,
                 recordId: r.record_id,
                 content: r.content,
@@ -397,7 +395,7 @@ function handleRAG(data) {
                     <div class="evidence-header">
                         <span class="evidence-num">#${i + 1}</span>
                         <span class="evidence-source">${sourceIcon} ${escapeHtml(r.source_label)}</span>
-                        <span class="relevance-badge ${relevanceClass}">${matchTypeLabel} ${relevance}</span>
+                        <span class="relevance-badge ${relevanceClass}">${relevance}</span>
                         <span class="clickable-hint">点击查看详情</span>
                     </div>
                     <div class="evidence-content">${escapeHtml(r.content)}</div>
@@ -478,14 +476,12 @@ function handleDiagnosis(data) {
             const sourceIcon = ev.source === 'faa' ? '✈️' : ev.source === 'maintnet' ? '🔧' : '📖';
             const relevance = ev.relevance || '低';
             const relevanceClass = relevance === '高' ? 'relevance-high' : relevance === '中' ? 'relevance-medium' : 'relevance-low';
-            const matchTypeLabel = ev.match_type === 'keyword' ? '🔑' : '🧠';
             
             // 存储数据
             const evidenceData = {
                 title: `诊断依据 #${i + 1}`,
                 source: ev.source_label,
                 relevance: relevance,
-                matchType: ev.match_type,
                 aircraftModel: ev.aircraft_model,
                 recordId: ev.record_id,
                 content: ev.content,
@@ -502,7 +498,7 @@ function handleDiagnosis(data) {
                     <div class="evidence-header">
                         <span class="evidence-num">#${i + 1}</span>
                         <span class="evidence-source">${sourceIcon} ${escapeHtml(ev.source_label)}</span>
-                        <span class="relevance-badge ${relevanceClass}">${matchTypeLabel} ${relevance}</span>
+                        <span class="relevance-badge ${relevanceClass}">${relevance}</span>
                         <span class="clickable-hint">点击查看详情</span>
                     </div>
                     <div class="evidence-content">${escapeHtml(ev.content)}</div>
@@ -678,8 +674,7 @@ async function searchKnowledge(page = 1) {
             data.results.forEach((r, i) => {
                 const content = r.content || JSON.stringify(r);
                 const score = r.score || 0;
-                const relevance = r.relevance || '低';  // 高/中/低
-                const matchType = r.match_type || 'vector';  // keyword/vector
+                const relevance = r.relevance || '低';
                 const keywords = r.keywords || [];
                 const source = r.source || '知识库';
                 const aircraftModel = r.aircraft_model || '';
@@ -712,9 +707,6 @@ async function searchKnowledge(page = 1) {
                     relevanceLabel = '中';
                 }
                 
-                // 匹配类型标签
-                const matchTypeLabel = matchType === 'keyword' ? '🔑 关键词' : '🧠 语义';
-                
                 // 计算全局序号
                 const globalIndex = (searchState.currentPage - 1) * searchState.pageSize + i + 1;
 
@@ -725,7 +717,6 @@ async function searchKnowledge(page = 1) {
                     title: `搜索结果 ${globalIndex}`,
                     source: source,
                     relevance: relevance,
-                    matchType: matchType,
                     aircraftModel: aircraftModel,
                     recordId: recordId,
                     content: content,
@@ -741,7 +732,6 @@ async function searchKnowledge(page = 1) {
                             <div class="search-result-title">📄 结果 ${globalIndex}</div>
                             <div class="search-result-score">
                                 <span class="relevance-badge ${relevanceClass}">相关度: ${relevanceLabel}</span>
-                                <span class="match-type-badge">${matchTypeLabel}</span>
                             </div>
                         </div>
                         <div class="search-result-content">${highlightedContent}${content.length > 300 ? '...' : ''}</div>
@@ -2487,14 +2477,12 @@ function handleMaintenanceRAG(data) {
             const sourceIcon = r.source === 'faa' ? '✈️' : r.source === 'maintnet' ? '🔧' : r.source === 'user_case' ? '📝' : '📖';
             const relevance = r.relevance || '低';
             const relevanceClass = relevance === '高' ? 'relevance-high' : relevance === '中' ? 'relevance-medium' : 'relevance-low';
-            const matchTypeLabel = r.match_type === 'keyword' ? '🔑' : '🧠';
             
             // 存储数据
             const evidenceData = {
                 title: `维护依据 #${i + 1}`,
                 source: r.source_label,
                 relevance: relevance,
-                matchType: r.match_type,
                 aircraftModel: r.aircraft_model,
                 recordId: r.record_id,
                 content: r.content,
@@ -2510,7 +2498,7 @@ function handleMaintenanceRAG(data) {
                     <div class="evidence-header">
                         <span class="evidence-num">#${i + 1}</span>
                         <span class="evidence-source">${sourceIcon} ${escapeHtml(r.source_label)}</span>
-                        <span class="relevance-badge ${relevanceClass}">${matchTypeLabel} ${relevance}</span>
+                        <span class="relevance-badge ${relevanceClass}">${relevance}</span>
                         <span class="clickable-hint">点击查看详情</span>
                     </div>
                     <div class="evidence-content">${escapeHtml(r.content)}</div>
@@ -3118,7 +3106,6 @@ function showEvidenceDetail(data) {
                 <div class="detail-label">相关度</div>
                 <div class="detail-value">
                     <span class="detail-relevance ${relevanceClass}">${data.relevance}</span>
-                    ${data.matchType ? `<span style="margin-left: 8px; font-size: 12px; color: #64748b;">${data.matchType === 'keyword' ? '🔑 关键词匹配' : '🧠 语义匹配'}</span>` : ''}
                 </div>
             </div>
         `;

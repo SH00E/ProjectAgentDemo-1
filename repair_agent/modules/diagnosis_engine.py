@@ -113,95 +113,75 @@ class RepairDiagnosisEngine:
         return text.lower().strip()
 
     @staticmethod
-    def _generate_query_variants(query: str) -> List[str]:
-        """生成查询的各种格式变体"""
-        variants = {query.strip()}
-        q = query.strip()
-        # 去分隔符后的版本
-        no_sep = RepairDiagnosisEngine._normalize(q)
-        if no_sep != q.lower():
-            variants.add(no_sep)
-        # 原词小写
-        variants.add(q.lower())
-        # 如果包含分隔符，也尝试用空格替代
-        for sep in ['-', '_', '/']:
-            if sep in q:
-                variants.add(q.replace(sep, ''))
-        return [v for v in variants if v]
+    def split_query_tokens(query: str) -> List[str]:
+        """拆分为有意义的 tokens: 原始查询 + 分隔符拆分 + 2-3字滑动窗口"""
+        tokens = [query]
+        # 按分隔符拆分
+        for sep in [' ', ',', '，', '、', '/', '|', '-', '_']:
+            for part in query.split(sep):
+                part = part.strip()
+                if part and len(part) >= 2 and part not in tokens:
+                    tokens.append(part)
+        # 滑动窗口（仅对长度>=4的片段，避免太短的无意义token）
+        for part in list(tokens):
+            if len(part) >= 4:
+                for win_size in [2, 3]:
+                    for k in range(len(part) - win_size + 1):
+                        token = part[k:k+win_size]
+                        if token not in tokens:
+                            tokens.append(token)
+        return tokens
 
     @staticmethod
-    def _compute_exact_match_score(record: Dict, query: str) -> float:
+    def compute_keyword_score(record: Dict, query_tokens: List[str], full_query: str) -> tuple:
         """
-        计算精确匹配得分：
-        - 完全匹配（包含完整查询串）→ 1.8x
-        - 所有原始token都匹配 → 1.6x
-        - 部分token匹配 → 1.0 + 0.15 * 匹配token数
+        统计 query_tokens 中有多少命中了 record 的文本字段
+        
+        返回: (score, matched_count, total_count)
         """
-        text_fields = " ".join([
+        text = " ".join([
             str(record.get("content", "")),
             str(record.get("description", "")),
             str(record.get("problem", "")),
             str(record.get("action", "")),
             str(record.get("aircraft_model", ""))
         ])
-        text_norm = RepairDiagnosisEngine._normalize(text_fields)
-        query_norm = RepairDiagnosisEngine._normalize(query)
+        text_norm = RepairDiagnosisEngine._normalize(text)
 
-        # 生成查询变体（含去分隔符版本）
-        query_variants = RepairDiagnosisEngine._generate_query_variants(query)
+        total = len(query_tokens)
+        if total == 0:
+            return 0.0, 0, 0
 
-        # 精确变体匹配：任一变体以连续子串出现 → 最高分
-        for variant in query_variants:
-            if variant in text_norm:
-                return 1.8
-
-        # 原始token匹配（按常见分隔符拆分原始查询）
-        raw_tokens = []
-        for sep in [' ', ',', '，', '、', '/', '|', '-', '_']:
-            for t in query.split(sep):
-                t = t.strip()
-                if len(t) >= 2 and t not in raw_tokens:
-                    raw_tokens.append(t)
-        if not raw_tokens:
-            raw_tokens = [query_norm]
-
-        # 检查每个原始token是否出现在归一化文本中
-        match_count = 0
-        for token in raw_tokens:
+        matched = 0
+        for token in query_tokens:
             token_norm = RepairDiagnosisEngine._normalize(token)
             if token_norm and token_norm in text_norm:
-                match_count += 1
+                matched += 1
 
-        if match_count >= len(raw_tokens):
-            return 1.6
-        elif match_count > 0:
-            return 1.0 + 0.15 * match_count
-        return 1.0
+        ratio = matched / total
 
-    def _search_collection(self, client, embedder, collection_name: str, query: str,
-                           keyword_results: Dict, vector_results: Dict):
-        """在单个 Qdrant 集合中搜索"""
+        # boost: 全部命中 > 大部分命中 > 部分命中
+        if matched == total and total > 1:
+            boost = 1.5  # 全部命中
+        elif ratio >= 0.67:
+            boost = 1.2  # 大部分命中
+        else:
+            boost = 1.0
+
+        # 额外检查：完整查询作为连续子串出现
+        full_query_norm = RepairDiagnosisEngine._normalize(full_query)
+        if full_query_norm and full_query_norm in text_norm:
+            boost = max(boost, 1.8)
+
+        score = ratio * boost
+        return score, matched, total
+
+    def _search_collection(self, client, collection_name: str, query_parts: List[str],
+                           keyword_results: Dict):
+        """在单个 Qdrant 集合中做关键词召回（不评分）"""
         from qdrant_client.models import Filter, FieldCondition, MatchText
 
-        query_parts = [query]
-        for sep in [' ', ',', '，', '、', '/', '|', '-', '_']:
-            for part in query.split(sep):
-                part = part.strip()
-                if part and len(part) >= 2 and part not in query_parts:
-                    query_parts.append(part)
-        # 滑动窗口辅助召回（仅用于关键词匹配，不用于评分）
-        for part in list(query_parts):
-            if len(part) >= 2:
-                for win_size in [2, 3]:
-                    for k in range(len(part) - win_size + 1):
-                        token = part[k:k+win_size]
-                        if token not in query_parts:
-                            query_parts.append(token)
-
         kw_found = 0
-        vec_found = 0
-
-        # ----- 关键词搜索 -----
         try:
             keyword_conditions = []
             for qp in query_parts:
@@ -228,8 +208,6 @@ class RepairDiagnosisEngine:
                 if rid not in keyword_results:
                     keyword_results[rid] = {
                         "content": payload.get("content", payload.get("text", "")),
-                        "score": 0.9,
-                        "match_type": "keyword",
                         "source": payload.get("source", "unknown"),
                         "record_id": rid,
                         "aircraft_model": payload.get("aircraft_model", ""),
@@ -238,53 +216,15 @@ class RepairDiagnosisEngine:
                         "problem": payload.get("problem", "") or payload.get("problem_zh", ""),
                         "action": payload.get("action", "") or payload.get("action_zh", ""),
                         "case_type": payload.get("case_type", ""),
-                        "vector_score": None,
                         "collection": collection_name,
                     }
                     kw_found += 1
-            logger.info(f"关键词搜索({collection_name}): 找到 {kw_found} 条")
+            logger.info(f"关键词召回({collection_name}): {kw_found} 条")
         except Exception as e:
-            logger.warning(f"关键词搜索失败({collection_name}): {e}")
-
-        # ----- 向量搜索 -----
-        try:
-            vector_q = embedder.encode(query).tolist()
-            vec_results = client.query_points(
-                collection_name=collection_name,
-                query=vector_q,
-                limit=1000,
-                with_payload=True
-            ).points
-            for r in vec_results:
-                payload = r.payload or {}
-                rid = payload.get("record_id", str(r.id))
-                if rid in keyword_results:
-                    keyword_results[rid]["vector_score"] = r.score
-                    if keyword_results[rid]["match_type"] == "keyword":
-                        keyword_results[rid]["match_type"] = "hybrid"
-                else:
-                    vector_results[rid] = {
-                        "content": payload.get("content", payload.get("text", "")),
-                        "score": 0.6,
-                        "match_type": "vector",
-                        "source": payload.get("source", "unknown"),
-                        "record_id": rid,
-                        "aircraft_model": payload.get("aircraft_model", ""),
-                        "manufacturer": payload.get("manufacturer", ""),
-                        "description": payload.get("description", ""),
-                        "problem": payload.get("problem", ""),
-                        "action": payload.get("action", ""),
-                        "case_type": payload.get("case_type", ""),
-                        "vector_score": r.score,
-                        "collection": collection_name,
-                    }
-                    vec_found += 1
-            logger.info(f"向量搜索({collection_name}): 找到 {vec_found} 条")
-        except Exception as e:
-            logger.warning(f"向量搜索失败({collection_name}): {e}")
+            logger.warning(f"关键词召回失败({collection_name}): {e}")
 
     def _retrieve_knowledge(self, query: str, mode: str = "repair") -> List[Dict]:
-        """检索相关知识 - 搜索所有集合，关键词+向量混合，按模式过滤案例类型"""
+        """检索相关知识 - 关键词计分排序，向量作为 fallback"""
         try:
             from qdrant_client import QdrantClient
             from hello_agents.memory.embedding import get_text_embedder
@@ -297,17 +237,18 @@ class RepairDiagnosisEngine:
             # 确定要排除的案例类型
             exclude_case_type = "maintenance" if mode == "repair" else "repair"
 
-            # 搜索所有 Qdrant 集合
+            # 拆分查询 tokens
+            query_tokens = self.split_query_tokens(query)
+            logger.info(f"🔍 查询 tokens ({len(query_tokens)}): {query_tokens[:10]}...")
+
+            # ===== 第一步：关键词召回 =====
             collections = [c.name for c in client.get_collections().collections]
-            logger.info(f"🔍 搜索 {len(collections)} 个Qdrant集合: {collections}")
             keyword_results = {}
-            vector_results = {}
             for col_name in collections:
                 try:
-                    self._search_collection(client, embedder, col_name, query,
-                                            keyword_results, vector_results)
+                    self._search_collection(client, col_name, query_tokens, keyword_results)
                 except Exception as e:
-                    logger.warning(f"搜索集合失败({col_name}): {e}")
+                    logger.warning(f"召回失败({col_name}): {e}")
 
             # 过滤掉不匹配模式的案例类型
             filtered_out = 0
@@ -316,31 +257,21 @@ class RepairDiagnosisEngine:
                 if ct == exclude_case_type:
                     del keyword_results[rid]
                     filtered_out += 1
-            for rid in list(vector_results.keys()):
-                ct = vector_results[rid].get("case_type", "")
-                if ct == exclude_case_type:
-                    del vector_results[rid]
-                    filtered_out += 1
             if filtered_out > 0:
-                logger.info(f"🗂️ 按模式 '{mode}' 过滤掉 {filtered_out} 条 '{exclude_case_type}' 类型案例")
+                logger.info(f"🗂️ 过滤掉 {filtered_out} 条 '{exclude_case_type}' 类型案例")
 
-            logger.info(f"Qdrant汇总: 关键词 {len(keyword_results)} 条, 向量 {len(vector_results)} 条")
-
-            # ----- SQLite 关键词搜索（用户案例）-----
+            # ===== 第二步：SQLite 关键词召回 =====
             try:
                 import sqlite3
                 cases_db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
                                              "memory_data", "cases.db")
                 if os.path.exists(cases_db_path):
-                    # 构建查询 token（用原始查询，不用滑动窗口结果评分）
-                    raw_tokens = []
+                    raw_tokens = [query]
                     for sep in [' ', ',', '，', '、', '/', '|', '-', '_']:
                         for t in query.split(sep):
                             t = t.strip()
-                            if len(t) >= 2 and t not in raw_tokens:
+                            if t and len(t) >= 2 and t not in raw_tokens:
                                 raw_tokens.append(t)
-                    if not raw_tokens:
-                        raw_tokens = [query]
 
                     conn = sqlite3.connect(cases_db_path)
                     conn.row_factory = sqlite3.Row
@@ -355,7 +286,6 @@ class RepairDiagnosisEngine:
                                   OR maintenance_standard LIKE ?)''')
                         sql_params.extend([like_param] * 10)
                     if sql_conditions:
-                        # 按模式过滤案例类型
                         sql = 'SELECT DISTINCT * FROM cases WHERE (' + ' OR '.join(sql_conditions) + ') AND case_type != ?'
                         sql_params.append(exclude_case_type)
                         cursor.execute(sql, sql_params)
@@ -364,6 +294,8 @@ class RepairDiagnosisEngine:
                     for row in rows:
                         case_id = row["id"]
                         rid = f"CASE_{case_id}"
+                        if rid in keyword_results:
+                            continue
                         case_type = row["case_type"] if "case_type" in row.keys() else "repair"
                         if case_type == "maintenance":
                             content = f"{row['title']} | 设备: {row['device_type']} | 维护类型: {row['maintenance_type'] if 'maintenance_type' in row.keys() else ''} | 方案: {row['solution']}"
@@ -371,8 +303,6 @@ class RepairDiagnosisEngine:
                             content = f"{row['title']} | 设备: {row['device_type']} | 故障: {row['fault_symptom'] or ''} | 原因: {row['fault_cause'] or ''} | 方案: {row['solution']}"
                         keyword_results[rid] = {
                             "content": content,
-                            "score": 0.95,
-                            "match_type": "keyword",
                             "source": "user_case",
                             "record_id": rid,
                             "aircraft_model": row["device_type"],
@@ -381,86 +311,66 @@ class RepairDiagnosisEngine:
                             "problem": (row["fault_cause"] if case_type == "repair" else (row["maintenance_cycle"] if "maintenance_cycle" in row.keys() else "")) or "",
                             "action": row["solution"] or "",
                             "case_type": case_type,
-                            "vector_score": None,
                             "collection": "sqlite",
                         }
             except Exception as e:
                 logger.warning(f"SQLite 搜索失败: {e}")
 
-            # ----- 中文翻译后再次向量搜索 -----
-            has_chinese = any('\u4e00' <= c <= '\u9fff' for c in query)
-            if has_chinese:
-                try:
-                    query_en = self._translate_to_english(query)
-                    if query_en and query_en != query:
-                        logger.info(f"📝 翻译查询: {query} -> {query_en}")
-                        for col_name in collections:
-                            try:
-                                vector_en = embedder.encode(query_en).tolist()
-                                results_en = client.query_points(
-                                    collection_name=col_name,
-                                    query=vector_en,
-                                    limit=1000,
-                                    with_payload=True
-                                ).points
-                                for r in results_en:
-                                    payload = r.payload or {}
-                                    rid = payload.get("record_id", str(r.id))
-                                    if rid in keyword_results:
-                                        if keyword_results[rid].get("vector_score") is None:
-                                            keyword_results[rid]["vector_score"] = r.score
-                                    elif rid not in vector_results:
-                                        vector_results[rid] = {
-                                            "content": payload.get("content", payload.get("text", "")),
-                                            "score": 0.5,
-                                            "match_type": "vector_en",
-                                            "source": payload.get("source", "unknown"),
-                                            "record_id": rid,
-                                            "aircraft_model": payload.get("aircraft_model", ""),
-                                            "manufacturer": payload.get("manufacturer", ""),
-                                            "description": payload.get("description", ""),
-                                            "problem": payload.get("problem", ""),
-                                            "action": payload.get("action", ""),
-                                            "case_type": payload.get("case_type", ""),
-                                            "vector_score": r.score,
-                                            "collection": col_name,
-                                        }
-                            except Exception:
-                                pass
-                except Exception as e:
-                    logger.warning(f"翻译查询失败: {e}")
-
-            # ----- 合并 + 精确匹配加权重排序 -----
-            all_results = {**keyword_results, **vector_results}
-            result_list = list(all_results.values())
+            # ===== 第三步：关键词计分 =====
+            result_list = list(keyword_results.values())
             for r in result_list:
-                exact_boost = self._compute_exact_match_score(r, query)
-                base = r.get("score", 0.5)
-                vec = r.get("vector_score")
-                if vec is not None and vec > 0:
-                    r["score"] = max(base * exact_boost, vec * 1.5)
-                else:
-                    r["score"] = base * exact_boost
+                score, matched, total = self.compute_keyword_score(r, query_tokens, query)
+                r["score"] = score
+                r["matched_tokens"] = matched
+                r["total_tokens"] = total
+
+            # ===== 第四步：如果关键词无结果，用向量 fallback =====
+            if not result_list:
+                logger.info("📊 关键词无结果，启动向量 fallback...")
+                vector_fallback = {}
+                for col_name in collections:
+                    try:
+                        vector_q = embedder.encode(query).tolist()
+                        vec_results = client.query_points(
+                            collection_name=col_name,
+                            query=vector_q,
+                            limit=20,
+                            with_payload=True
+                        ).points
+                        for r in vec_results:
+                            payload = r.payload or {}
+                            rid = payload.get("record_id", str(r.id))
+                            if rid not in vector_fallback:
+                                ct = payload.get("case_type", "")
+                                if ct == exclude_case_type:
+                                    continue
+                                vector_fallback[rid] = {
+                                    "content": payload.get("content", payload.get("text", "")),
+                                    "score": 0.45,
+                                    "source": payload.get("source", "unknown"),
+                                    "record_id": rid,
+                                    "aircraft_model": payload.get("aircraft_model", ""),
+                                    "manufacturer": payload.get("manufacturer", ""),
+                                    "description": payload.get("description", ""),
+                                    "problem": payload.get("problem", ""),
+                                    "action": payload.get("action", ""),
+                                    "case_type": ct,
+                                    "collection": col_name,
+                                    "matched_tokens": 0,
+                                    "total_tokens": len(query_tokens),
+                                }
+                    except Exception:
+                        pass
+                result_list = list(vector_fallback.values())
+                logger.info(f"📊 向量 fallback: 找到 {len(result_list)} 条")
+
+            # 排序
             result_list.sort(key=lambda x: x["score"], reverse=True)
-            logger.info(f"📊 检索完成: 共 {len(result_list)} 条结果 (关键词 {len(keyword_results)} + 向量 {len(vector_results)})")
+            logger.info(f"📊 检索完成: 共 {len(result_list)} 条结果")
             return result_list[:50]
-            
+
         except Exception as e:
             logger.warning(f"⚠️ 知识检索失败: {e}")
-            # 回退到RAG工具
-            try:
-                result = self.rag.run({
-                    "action": "search",
-                    "query": query,
-                    "limit": 5,
-                    "min_score": 0.2
-                })
-                if isinstance(result, str):
-                    return [{"content": result, "score": 0.5, "source": "rag"}]
-                elif isinstance(result, list):
-                    return result
-            except:
-                pass
             return []
     
     def _query_neo4j(self, keywords: List[str]) -> List[Dict]:
