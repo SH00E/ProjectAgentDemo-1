@@ -555,8 +555,32 @@ async def search_knowledge(request: Request):
                 boost = max(boost, 1.8)
             return ratio * boost, matched, total
 
-        # 拆分查询 tokens
-        query_tokens = _split_query_tokens(query)
+        # 先用LLM提取关键词，再检索
+        try:
+            llm = agent_state["agent"].llm
+            kw_prompt = fmt_prompt("extract_keywords", "user", description=query)
+            kw_messages = [
+                {"role": "system", "content": fmt_prompt("extract_keywords", "system")},
+                {"role": "user", "content": kw_prompt}
+            ]
+            kw_response = llm.invoke(kw_messages)
+            extracted = [k.strip() for k in kw_response.split(",") if k.strip() and k.strip() != "无"]
+            if extracted:
+                query_tokens = list(extracted)
+                # 为每个关键词生成2-3字滑动窗口
+                for kw in extracted:
+                    if len(kw) >= 4:
+                        for win_size in [2, 3]:
+                            for k in range(len(kw) - win_size + 1):
+                                token = kw[k:k+win_size]
+                                if token not in query_tokens:
+                                    query_tokens.append(token)
+                logger.info(f"📝 提取到关键词: {extracted}")
+            else:
+                query_tokens = _split_query_tokens(query)
+        except Exception as e:
+            logger.warning(f"关键词提取失败，使用拆分: {e}")
+            query_tokens = _split_query_tokens(query)
 
         # ===== 关键词召回 =====
         collections = [c.name for c in client.get_collections().collections]

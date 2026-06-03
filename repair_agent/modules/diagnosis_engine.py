@@ -55,8 +55,9 @@ class RepairDiagnosisEngine:
             Dict: 诊断结果
         """
         try:
-            # 步骤1: 检索相关知识
-            knowledge_results = self._retrieve_knowledge(description, mode)
+            # 步骤1: 提取关键词并检索
+            keywords = self._extract_keywords(description, mode)
+            knowledge_results = self._retrieve_knowledge(description, mode, keywords=keywords)
             
             # 步骤2: 分析照片（如果有且视觉模型可用）
             image_analysis = ""
@@ -223,8 +224,14 @@ class RepairDiagnosisEngine:
         except Exception as e:
             logger.warning(f"关键词召回失败({collection_name}): {e}")
 
-    def _retrieve_knowledge(self, query: str, mode: str = "repair") -> List[Dict]:
-        """检索相关知识 - 关键词计分排序，向量作为 fallback"""
+    def _retrieve_knowledge(self, query: str, mode: str = "repair", keywords: List[str] = None) -> List[Dict]:
+        """检索相关知识 - 关键词计分排序，向量作为 fallback
+        
+        Args:
+            query: 原始查询（用于向量fallback和完整子串匹配）
+            mode: "repair" 或 "maintenance"
+            keywords: 预提取的关键词列表，如果为None则从query拆分
+        """
         try:
             from qdrant_client import QdrantClient
             from hello_agents.memory.embedding import get_text_embedder
@@ -237,9 +244,20 @@ class RepairDiagnosisEngine:
             # 确定要排除的案例类型
             exclude_case_type = "maintenance" if mode == "repair" else "repair"
 
-            # 拆分查询 tokens
-            query_tokens = self.split_query_tokens(query)
-            logger.info(f"🔍 查询 tokens ({len(query_tokens)}): {query_tokens[:10]}...")
+            # 使用预提取的关键词，或从query拆分
+            if keywords:
+                # 关键词 + 每个关键词的2-3字滑动窗口
+                query_tokens = list(keywords)
+                for kw in keywords:
+                    if len(kw) >= 4:
+                        for win_size in [2, 3]:
+                            for k in range(len(kw) - win_size + 1):
+                                token = kw[k:k+win_size]
+                                if token not in query_tokens:
+                                    query_tokens.append(token)
+            else:
+                query_tokens = self.split_query_tokens(query)
+            logger.info(f"🔍 检索 tokens ({len(query_tokens)}): {query_tokens[:10]}...")
 
             # ===== 第一步：关键词召回 =====
             collections = [c.name for c in client.get_collections().collections]
@@ -632,9 +650,9 @@ class RepairDiagnosisEngine:
             } for r in neo4j_results[:5]])
             yield ("step", f"✅ 从知识图谱找到 {random_reduce_count(len(neo4j_results))} 条相关信息")
         
-        # 查询 Qdrant
+        # 查询 Qdrant（用提取的关键词检索）
         yield ("step", "📚 正在查询向量知识库 (Qdrant)...")
-        qdrant_results = self._retrieve_knowledge(description, mode)
+        qdrant_results = self._retrieve_knowledge(description, mode, keywords=keywords)
         if qdrant_results:
             yield ("rag", qdrant_results)
             all_evidence.extend(qdrant_results[:20])
@@ -694,9 +712,9 @@ class RepairDiagnosisEngine:
                     } for r in neo4j_results_2[:3]])
                     yield ("step", f"✅ 第2轮从知识图谱找到 {random_reduce_count(len(neo4j_results_2))} 条信息")
                 
-                # 再次查询 Qdrant（使用不同角度的查询）
+                # 再次查询 Qdrant（使用扩展关键词）
                 broader_query = f"{description} {' '.join(broader_keywords[:3])}"
-                qdrant_results_2 = self._retrieve_knowledge(broader_query, mode)
+                qdrant_results_2 = self._retrieve_knowledge(broader_query, mode, keywords=keywords + broader_keywords)
                 if qdrant_results_2:
                     yield ("rag", qdrant_results_2)
                     all_evidence.extend(qdrant_results_2[:10])
