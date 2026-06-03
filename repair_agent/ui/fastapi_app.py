@@ -277,17 +277,14 @@ def diagnosis_stream(description: str, image_path: str = None, mode: str = "repa
                     source = r.get("source", "unknown")
                     source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "知识图谱" if source == "neo4j" else "知识库"
                     
-                    # 计算相似度等级：基于向量分数显示，关键词匹配不显示
-                    vector_score = r.get("vector_score")
-                    if vector_score is not None and vector_score > 0:
-                        if vector_score >= 0.6:
-                            relevance = "高"
-                        elif vector_score >= 0.4:
-                            relevance = "中"
-                        else:
-                            relevance = "低"
+                    # 计算相似度等级：基于综合分数（与排序一致）
+                    final_score = r.get("score", 0)
+                    if final_score >= 1.0:
+                        relevance = "高"
+                    elif final_score >= 0.7:
+                        relevance = "中"
                     else:
-                        relevance = ""
+                        relevance = "低"
                     
                     results.append({
                         "content": r.get("content", str(r))[:200],
@@ -326,11 +323,13 @@ def diagnosis_stream(description: str, image_path: str = None, mode: str = "repa
                 aircraft_models = details.get("aircraft_models", [])
                 incident_types = details.get("incident_types", [])
                 
-                vs = ref.get("vector_score")
-                if vs is not None and vs > 0:
-                    ev_rel = "高" if vs >= 0.6 else "中" if vs >= 0.4 else "低"
+                ev_score = ref.get("score", 0)
+                if ev_score >= 1.0:
+                    ev_rel = "高"
+                elif ev_score >= 0.7:
+                    ev_rel = "中"
                 else:
-                    ev_rel = ""
+                    ev_rel = "低"
                 evidence_chain.append({
                     "content": ref.get("content", "")[:200],
                     "score": ref.get("score", 0),
@@ -770,17 +769,14 @@ async def search_knowledge(request: Request):
             source = r.get("source", "unknown")
             source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "用户案例" if source == "user_case" else "知识库"
             
-            # 计算相似度等级：基于向量分数显示，关键词匹配不显示
-            vector_score = r.get("vector_score")
-            if vector_score is not None and vector_score > 0:
-                if vector_score >= 0.6:
-                    relevance = "高"
-                elif vector_score >= 0.4:
-                    relevance = "中"
-                else:
-                    relevance = "低"
+            # 计算相似度等级：基于综合分数（与排序一致）
+            final_score = r.get("score", 0)
+            if final_score >= 1.0:
+                relevance = "高"
+            elif final_score >= 0.7:
+                relevance = "中"
             else:
-                relevance = ""
+                relevance = "低"
             
             enhanced_results.append({
                 "content": r.get("content", ""),
