@@ -237,6 +237,7 @@ class RepairDiagnosisEngine:
                         "description": payload.get("description", "") or payload.get("description_zh", ""),
                         "problem": payload.get("problem", "") or payload.get("problem_zh", ""),
                         "action": payload.get("action", "") or payload.get("action_zh", ""),
+                        "case_type": payload.get("case_type", ""),
                         "vector_score": None,
                         "collection": collection_name,
                     }
@@ -273,6 +274,7 @@ class RepairDiagnosisEngine:
                         "description": payload.get("description", ""),
                         "problem": payload.get("problem", ""),
                         "action": payload.get("action", ""),
+                        "case_type": payload.get("case_type", ""),
                         "vector_score": r.score,
                         "collection": collection_name,
                     }
@@ -419,6 +421,7 @@ class RepairDiagnosisEngine:
                                             "description": payload.get("description", ""),
                                             "problem": payload.get("problem", ""),
                                             "action": payload.get("action", ""),
+                                            "case_type": payload.get("case_type", ""),
                                             "vector_score": r.score,
                                             "collection": col_name,
                                         }

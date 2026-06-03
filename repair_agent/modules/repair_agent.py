@@ -244,7 +244,7 @@ class RepairAgent:
         """故障诊断流程"""
         # 流式诊断
         diagnosis_result = None
-        for kind, data in self.diagnosis_engine.diagnose_with_stream(description, image_path):
+        for kind, data in self.diagnosis_engine.diagnose_with_stream(description, image_path, mode="repair"):
             if kind == "diagnosis":
                 diagnosis_result = data
             else:
@@ -257,7 +257,7 @@ class RepairAgent:
         # 流式推荐方案
         solution = None
         for kind, data in self.diagnosis_engine.recommend_solution_stream(
-            diagnosis_result.get("diagnosis", {})
+            diagnosis_result.get("diagnosis", {}), mode="repair"
         ):
             if kind == "solution":
                 solution = data
