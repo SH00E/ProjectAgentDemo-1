@@ -8,11 +8,14 @@ import os
 import sys
 import json
 import time
+import random
 import logging
 import tempfile
 import sqlite3
 from typing import Dict, List, Optional
 from datetime import datetime
+
+from prompts import fmt_prompt
 
 from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
@@ -257,7 +260,7 @@ def diagnosis_stream(description: str, image_path: str = None, mode: str = "repa
             # 处理 Neo4j 知识图谱结果
             if data:
                 results = []
-                for r in data[:5]:
+                for r in data:
                     results.append({
                         "type": r.get("type", ""),
                         "name": r.get("name", ""),
@@ -269,28 +272,28 @@ def diagnosis_stream(description: str, image_path: str = None, mode: str = "repa
         elif kind == "rag":
             if data:
                 results = []
-                for r in data[:5]:
+                for r in data:
                     # 构建证据链信息
                     source = r.get("source", "unknown")
                     source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "知识图谱" if source == "neo4j" else "知识库"
                     
-                    # 计算相似度等级
-                    score = r.get("score", 0)
-                    match_type = r.get("match_type", "vector")
-                    if match_type == "keyword":
-                        relevance = "高"
-                    elif score >= 0.6:
-                        relevance = "高"
-                    elif score >= 0.4:
-                        relevance = "中"
+                    # 计算相似度等级：基于向量分数显示，关键词匹配不显示
+                    vector_score = r.get("vector_score")
+                    if vector_score is not None and vector_score > 0:
+                        if vector_score >= 0.6:
+                            relevance = "高"
+                        elif vector_score >= 0.4:
+                            relevance = "中"
+                        else:
+                            relevance = "低"
                     else:
-                        relevance = "低"
+                        relevance = ""
                     
                     results.append({
                         "content": r.get("content", str(r))[:200],
-                        "score": score,
+                        "score": r.get("score", 0),
                         "relevance": relevance,
-                        "match_type": match_type,
+                        "match_type": r.get("match_type", ""),
                         "source": source,
                         "source_label": source_label,
                         "record_id": r.get("record_id", ""),
@@ -314,7 +317,7 @@ def diagnosis_stream(description: str, image_path: str = None, mode: str = "repa
             # 获取证据链
             knowledge_refs = data.get("knowledge_references", [])
             evidence_chain = []
-            for ref in knowledge_refs[:8]:
+            for ref in knowledge_refs:
                 source = ref.get("source", "unknown")
                 source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "知识图谱" if source == "neo4j" else "知识库"
                 
@@ -323,10 +326,15 @@ def diagnosis_stream(description: str, image_path: str = None, mode: str = "repa
                 aircraft_models = details.get("aircraft_models", [])
                 incident_types = details.get("incident_types", [])
                 
+                vs = ref.get("vector_score")
+                if vs is not None and vs > 0:
+                    ev_rel = "高" if vs >= 0.6 else "中" if vs >= 0.4 else "低"
+                else:
+                    ev_rel = ""
                 evidence_chain.append({
                     "content": ref.get("content", "")[:200],
                     "score": ref.get("score", 0),
-                    "relevance": "高" if ref.get("match_type") == "keyword" or ref.get("score", 0) >= 0.6 else "中" if ref.get("score", 0) >= 0.4 else "低",
+                    "relevance": ev_rel,
                     "match_type": ref.get("match_type", "vector"),
                     "source": source,
                     "source_label": source_label,
@@ -498,112 +506,184 @@ async def search_knowledge(request: Request):
         client = QdrantClient(url=qdrant_url, trust_env=not is_local)
         embedder = get_text_embedder()
         
+        def _normalize(text):
+            for sep in ['-', '_', ' ', '　', '/', '\\', '·', '•']:
+                text = text.replace(sep, '')
+            return text.lower().strip()
+
+        def _compute_exact_match(record, query_str):
+            fields = " ".join([
+                str(record.get("content", "")),
+                str(record.get("description", "")),
+                str(record.get("problem", "")),
+                str(record.get("action", "")),
+                str(record.get("aircraft_model", ""))
+            ])
+            text_norm = _normalize(fields)
+            query_norm = _normalize(query_str)
+
+            # 生成变体（去分隔符等）
+            variants = {query_str.strip(), query_str.strip().lower(), query_norm}
+            for sep in ['-', '_', '/']:
+                if sep in query_str:
+                    variants.add(query_str.replace(sep, ''))
+            for v in variants:
+                if v and v in text_norm:
+                    return 1.8
+
+            raw_tokens = []
+            for sep in [' ', ',', '，', '、', '/', '|', '-', '_']:
+                for t in query_str.split(sep):
+                    t = t.strip()
+                    if len(t) >= 2 and t not in raw_tokens:
+                        raw_tokens.append(t)
+            if not raw_tokens:
+                raw_tokens = [query_norm]
+
+            match_count = 0
+            for token in raw_tokens:
+                tn = _normalize(token)
+                if tn and tn in text_norm:
+                    match_count += 1
+            if match_count >= len(raw_tokens):
+                return 1.6
+            elif match_count > 0:
+                return 1.0 + 0.15 * match_count
+            return 1.0
+
+        # 搜索所有 Qdrant 集合
         collections = [c.name for c in client.get_collections().collections]
-        collection_name = "aviation_knowledge_base" if "aviation_knowledge_base" in collections else "rag_knowledge_base"
-        
-        # 分离关键词结果和向量结果
-        keyword_results = {}  # 关键词匹配的结果（高优先级）
-        vector_results = {}   # 向量搜索的结果（低优先级）
-        
-        # ==================== 1. 关键词搜索（Qdrant 全文索引）====================
-        try:
-            # 拆分查询词，支持部分匹配
-            query_parts = [query]  # 完整查询
-            # 按空格、逗号、顿号拆分
-            for sep in [' ', ',', '，', '、', '/', '|']:
-                for part in query.split(sep):
-                    part = part.strip()
-                    if part and len(part) >= 2 and part not in query_parts:
-                        query_parts.append(part)
-            # 对中文查询生成2-3字滑动窗口子词（"制导系统故障"→"制导""系统""故障"等）
-            for part in list(query_parts):
-                if len(part) >= 2:
-                    for win_size in [2, 3]:
-                        for k in range(len(part) - win_size + 1):
-                            token = part[k:k+win_size]
-                            if token not in query_parts:
-                                query_parts.append(token)
-            
-            # 使用 MatchText 进行模糊匹配，支持多个查询词
-            keyword_conditions = []
-            for q in query_parts:
-                keyword_conditions.extend([
-                    FieldCondition(key="content", match=MatchText(text=q)),
-                    FieldCondition(key="text", match=MatchText(text=q)),
-                    FieldCondition(key="description", match=MatchText(text=q)),
-                    FieldCondition(key="description_zh", match=MatchText(text=q)),
-                    FieldCondition(key="problem", match=MatchText(text=q)),
-                    FieldCondition(key="problem_zh", match=MatchText(text=q)),
-                    FieldCondition(key="action", match=MatchText(text=q)),
-                    FieldCondition(key="action_zh", match=MatchText(text=q)),
-                ])
-            
-            keyword_filter = Filter(should=keyword_conditions)
-            
-            # 使用 scroll 进行关键词搜索
-            keyword_scroll = client.scroll(
-                collection_name=collection_name,
-                scroll_filter=keyword_filter,
-                limit=50,
-                with_payload=True
-            )
-            
-            for point in keyword_scroll[0]:
-                payload = point.payload or {}
-                rid = payload.get("record_id", str(point.id))
-                # 关键词匹配给高分 0.9
-                keyword_results[rid] = {
-                    "content": payload.get("content", payload.get("text", "")),
-                    "score": 0.9,
-                    "match_type": "keyword",
-                    "source": payload.get("source", "unknown"),
-                    "record_id": rid,
-                    "aircraft_model": payload.get("aircraft_model", ""),
-                    "manufacturer": payload.get("manufacturer", ""),
-                    "description": payload.get("description", "") or payload.get("description_zh", ""),
-                    "problem": payload.get("problem", "") or payload.get("problem_zh", ""),
-                    "action": payload.get("action", "") or payload.get("action_zh", "")
-                }
-            logger.info(f"关键词搜索 Qdrant: 找到 {len(keyword_results)} 条")
-        except Exception as e:
-            logger.warning(f"Qdrant 关键词搜索失败: {e}")
-        
-        # ==================== 1.5 关键词搜索（SQLite 案例库）====================
+        keyword_results = {}
+        vector_results = {}
+
+        for col_name in collections:
+            # ----- 关键词搜索 -----
+            try:
+                query_parts = [query]
+                for sep in [' ', ',', '，', '、', '/', '|', '-', '_']:
+                    for part in query.split(sep):
+                        part = part.strip()
+                        if part and len(part) >= 2 and part not in query_parts:
+                            query_parts.append(part)
+                for part in list(query_parts):
+                    if len(part) >= 2:
+                        for win_size in [2, 3]:
+                            for k in range(len(part) - win_size + 1):
+                                token = part[k:k+win_size]
+                                if token not in query_parts:
+                                    query_parts.append(token)
+
+                kw_conditions = []
+                for qp in query_parts:
+                    kw_conditions.extend([
+                        FieldCondition(key="content", match=MatchText(text=qp)),
+                        FieldCondition(key="text", match=MatchText(text=qp)),
+                        FieldCondition(key="description", match=MatchText(text=qp)),
+                        FieldCondition(key="description_zh", match=MatchText(text=qp)),
+                        FieldCondition(key="problem", match=MatchText(text=qp)),
+                        FieldCondition(key="problem_zh", match=MatchText(text=qp)),
+                        FieldCondition(key="action", match=MatchText(text=qp)),
+                        FieldCondition(key="action_zh", match=MatchText(text=qp)),
+                    ])
+                kw_filter = Filter(should=kw_conditions)
+                kw_scroll = client.scroll(
+                    collection_name=col_name,
+                    scroll_filter=kw_filter,
+                    limit=1000,
+                    with_payload=True
+                )
+                for point in kw_scroll[0]:
+                    payload = point.payload or {}
+                    rid = payload.get("record_id", str(point.id))
+                    if rid not in keyword_results:
+                        keyword_results[rid] = {
+                            "content": payload.get("content", payload.get("text", "")),
+                            "score": 0.9,
+                            "match_type": "keyword",
+                            "source": payload.get("source", "unknown"),
+                            "record_id": rid,
+                            "aircraft_model": payload.get("aircraft_model", ""),
+                            "manufacturer": payload.get("manufacturer", ""),
+                            "description": payload.get("description", "") or payload.get("description_zh", ""),
+                            "problem": payload.get("problem", "") or payload.get("problem_zh", ""),
+                            "action": payload.get("action", "") or payload.get("action_zh", ""),
+                            "vector_score": None,
+                        }
+            except Exception as e:
+                logger.warning(f"关键词搜索失败({col_name}): {e}")
+
+            # ----- 向量搜索（中文）-----
+            try:
+                vec_cn = embedder.encode(query).tolist()
+                res_cn = client.query_points(
+                    collection_name=col_name,
+                    query=vec_cn,
+                    limit=1000,
+                    with_payload=True
+                ).points
+                for r in res_cn:
+                    payload = r.payload or {}
+                    rid = payload.get("record_id", str(r.id))
+                    if rid in keyword_results:
+                        keyword_results[rid]["vector_score"] = r.score
+                        if keyword_results[rid]["match_type"] == "keyword":
+                            keyword_results[rid]["match_type"] = "hybrid"
+                    else:
+                        vector_results[rid] = {
+                            "content": payload.get("content", payload.get("text", "")),
+                            "score": 0.6,
+                            "match_type": "vector",
+                            "source": payload.get("source", "unknown"),
+                            "record_id": rid,
+                            "aircraft_model": payload.get("aircraft_model", ""),
+                            "manufacturer": payload.get("manufacturer", ""),
+                            "description": payload.get("description", ""),
+                            "problem": payload.get("problem", ""),
+                            "action": payload.get("action", ""),
+                            "vector_score": r.score,
+                        }
+            except Exception as e:
+                logger.warning(f"向量搜索失败({col_name}): {e}")
+
+        # ----- SQLite 关键词搜索 -----
         try:
             conn = sqlite3.connect(CASES_DB_PATH)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            
-            # 模糊匹配多个字段 - 使用拆分后的所有查询词
+
+            raw_tokens = []
+            for sep in [' ', ',', '，', '、', '/', '|', '-', '_']:
+                for t in query.split(sep):
+                    t = t.strip()
+                    if len(t) >= 2 and t not in raw_tokens:
+                        raw_tokens.append(t)
+            if not raw_tokens:
+                raw_tokens = [query]
+
             sql_conditions = []
             sql_params = []
-            for qp in query_parts:
-                like_param = f"%{qp}%"
+            for qp in raw_tokens:
+                lp = f"%{qp}%"
                 sql_conditions.append('''(title LIKE ? OR device_type LIKE ? OR fault_symptom LIKE ?
                           OR fault_cause LIKE ? OR solution LIKE ? OR parts_used LIKE ?
                           OR notes LIKE ? OR maintenance_type LIKE ? OR maintenance_cycle LIKE ?
                           OR maintenance_standard LIKE ?)''')
-                sql_params.extend([like_param] * 10)
+                sql_params.extend([lp] * 10)
             if sql_conditions:
                 cursor.execute('SELECT DISTINCT * FROM cases WHERE ' + ' OR '.join(sql_conditions), sql_params)
-            
             rows = cursor.fetchall()
             conn.close()
-            
             for row in rows:
                 case_id = row["id"]
                 rid = f"CASE_{case_id}"
                 case_type = row["case_type"] if "case_type" in row.keys() else "repair"
-                
-                # 构建内容文本
                 if case_type == "maintenance":
                     content = f"{row['title']} | 设备: {row['device_type']} | 维护类型: {row['maintenance_type'] if 'maintenance_type' in row.keys() else ''} | 周期: {row['maintenance_cycle'] if 'maintenance_cycle' in row.keys() else ''} | 方案: {row['solution']}"
                 else:
                     content = f"{row['title']} | 设备: {row['device_type']} | 故障: {row['fault_symptom'] or ''} | 原因: {row['fault_cause'] or ''} | 方案: {row['solution']}"
-                
                 keyword_results[rid] = {
                     "content": content,
-                    "score": 0.95,  # SQLite 关键词匹配给最高分
+                    "score": 0.95,
                     "match_type": "keyword",
                     "source": "user_case",
                     "record_id": rid,
@@ -612,88 +692,70 @@ async def search_knowledge(request: Request):
                     "description": (row["fault_symptom"] if case_type == "repair" else (row["maintenance_type"] if "maintenance_type" in row.keys() else "")) or "",
                     "problem": (row["fault_cause"] if case_type == "repair" else (row["maintenance_cycle"] if "maintenance_cycle" in row.keys() else "")) or "",
                     "action": row["solution"] or "",
-                    "case_type": case_type
+                    "case_type": case_type,
+                    "vector_score": None,
                 }
-            logger.info(f"关键词搜索 SQLite: 找到 {len(rows)} 条")
+            logger.info(f"SQLite 搜索: 找到 {len(rows)} 条")
         except Exception as e:
-            logger.warning(f"SQLite 关键词搜索失败: {e}")
-        
-        # ==================== 2. 向量搜索 ====================
-        try:
-            vector_cn = embedder.encode(query).tolist()
-            results_cn = client.query_points(
-                collection_name=collection_name,
-                query=vector_cn,
-                limit=50,
-                with_payload=True
-            ).points
-            
-            for r in results_cn:
-                payload = r.payload or {}
-                rid = payload.get("record_id", str(r.id))
-                if rid not in keyword_results:  # 关键词结果优先，不覆盖
-                    vector_results[rid] = {
-                        "content": payload.get("content", payload.get("text", "")),
-                        "score": r.score,
-                        "match_type": "vector",
-                        "source": payload.get("source", "unknown"),
-                        "record_id": rid,
-                        "aircraft_model": payload.get("aircraft_model", ""),
-                        "manufacturer": payload.get("manufacturer", ""),
-                        "description": payload.get("description", ""),
-                        "problem": payload.get("problem", ""),
-                        "action": payload.get("action", "")
-                    }
-            logger.info(f"向量搜索: 找到 {len(results_cn)} 条")
-        except Exception as e:
-            logger.warning(f"向量搜索失败: {e}")
-        
-        # ==================== 3. 如果是中文，翻译后再次搜索 ====================
+            logger.warning(f"SQLite 搜索失败: {e}")
+
+        # ----- 中文翻译后向量搜索 -----
         has_chinese = any('\u4e00' <= c <= '\u9fff' for c in query)
         if has_chinese:
             try:
                 llm = agent_state["agent"].llm
-                prompt = f"将以下中文维修故障描述翻译为简洁的英文，只返回翻译结果：\n{query}"
+                prompt = fmt_prompt("translate_fastapi", "user", query=query)
                 query_en = llm.invoke([{"role": "user", "content": prompt}]).strip()
-                
-                vector_en = embedder.encode(query_en).tolist()
-                results_en = client.query_points(
-                    collection_name=collection_name,
-                    query=vector_en,
-                    limit=50,
-                    with_payload=True
-                ).points
-                
-                for r in results_en:
-                    payload = r.payload or {}
-                    rid = payload.get("record_id", str(r.id))
-                    if rid not in keyword_results and rid not in vector_results:
-                        vector_results[rid] = {
-                            "content": payload.get("content", payload.get("text", "")),
-                            "score": r.score,
-                            "match_type": "vector_en",
-                            "source": payload.get("source", "unknown"),
-                            "record_id": rid,
-                            "aircraft_model": payload.get("aircraft_model", ""),
-                            "manufacturer": payload.get("manufacturer", ""),
-                            "description": payload.get("description", ""),
-                            "problem": payload.get("problem", ""),
-                            "action": payload.get("action", "")
-                        }
+                if query_en and query_en != query:
+                    for col_name in collections:
+                        try:
+                            vec_en = embedder.encode(query_en).tolist()
+                            res_en = client.query_points(
+                                collection_name=col_name,
+                                query=vec_en,
+                                limit=1000,
+                                with_payload=True
+                            ).points
+                            for r in res_en:
+                                payload = r.payload or {}
+                                rid = payload.get("record_id", str(r.id))
+                                if rid in keyword_results:
+                                    if keyword_results[rid].get("vector_score") is None:
+                                        keyword_results[rid]["vector_score"] = r.score
+                                elif rid not in vector_results:
+                                    vector_results[rid] = {
+                                        "content": payload.get("content", payload.get("text", "")),
+                                        "score": 0.5,
+                                        "match_type": "vector_en",
+                                        "source": payload.get("source", "unknown"),
+                                        "record_id": rid,
+                                        "aircraft_model": payload.get("aircraft_model", ""),
+                                        "manufacturer": payload.get("manufacturer", ""),
+                                        "description": payload.get("description", ""),
+                                        "problem": payload.get("problem", ""),
+                                        "action": payload.get("action", ""),
+                                        "vector_score": r.score,
+                                    }
+                        except Exception:
+                            pass
             except Exception as e:
                 logger.warning(f"翻译查询失败: {e}")
-        
-        # ==================== 4. 合并结果，关键词优先 ====================
-        # 关键词结果排在前面
+
+        # ----- 合并 + 精确匹配加权重排序 -----
         all_results = {**keyword_results, **vector_results}
-        
-        # 确保score是数字类型
-        for r in all_results.values():
+        result_list = list(all_results.values())
+        for r in result_list:
             if not isinstance(r.get("score"), (int, float)):
                 r["score"] = 0.5
-        
-        # 按分数排序（关键词结果分数高，会排在前面）
-        sorted_results = sorted(all_results.values(), key=lambda x: x.get("score", 0), reverse=True)
+            exact_boost = _compute_exact_match(r, query)
+            base = r.get("score", 0.5)
+            vec = r.get("vector_score")
+            if vec is not None and vec > 0:
+                r["score"] = max(base * exact_boost, vec * 1.5)
+            else:
+                r["score"] = base * exact_boost
+
+        sorted_results = sorted(result_list, key=lambda x: x["score"], reverse=True)
         
         # 计算分页
         total = len(sorted_results)
@@ -708,24 +770,23 @@ async def search_knowledge(request: Request):
             source = r.get("source", "unknown")
             source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "用户案例" if source == "user_case" else "知识库"
             
-            # 计算相似度等级
-            score = r.get("score", 0)
-            match_type = r.get("match_type", "vector")
-            
-            if match_type == "keyword":
-                relevance = "高"  # 关键词匹配直接显示高
-            elif score >= 0.6:
-                relevance = "高"
-            elif score >= 0.4:
-                relevance = "中"
+            # 计算相似度等级：基于向量分数显示，关键词匹配不显示
+            vector_score = r.get("vector_score")
+            if vector_score is not None and vector_score > 0:
+                if vector_score >= 0.6:
+                    relevance = "高"
+                elif vector_score >= 0.4:
+                    relevance = "中"
+                else:
+                    relevance = "低"
             else:
-                relevance = "低"
+                relevance = ""
             
             enhanced_results.append({
                 "content": r.get("content", ""),
-                "score": score,
+                "score": r.get("score", 0),
                 "relevance": relevance,
-                "match_type": match_type,
+                "match_type": r.get("match_type", ""),
                 "source": source_label,
                 "record_id": r.get("record_id", ""),
                 "aircraft_model": r.get("aircraft_model", ""),
@@ -1246,20 +1307,9 @@ async def ask_question(request: Request):
             # 第一步：分析问题，提取关键词
             yield sse_event("step", {"text": "🧠 正在分析问题..."})
             
-            analysis_prompt = f"""请分析以下问题，提取3-5个核心关键词或概念，并简要说明每个关键词与问题的关系。
-
-问题：{question}
-
-请以JSON格式返回：
-{{
-    "keywords": [
-        {{"keyword": "关键词1", "relation": "与问题的关系"}},
-        {{"keyword": "关键词2", "relation": "与问题的关系"}}
-    ]
-}}"""
-
+            analysis_prompt = fmt_prompt("fastapi_analysis", "user", question=question)
             analysis_messages = [
-                {"role": "system", "content": "你是一个专业知识分析师，擅长提取和解释专业概念。"},
+                {"role": "system", "content": fmt_prompt("fastapi_analysis", "system")},
                 {"role": "user", "content": analysis_prompt}
             ]
             
@@ -1292,17 +1342,9 @@ async def ask_question(request: Request):
                 
                 yield sse_event("step", {"text": f"📖 正在解析关键词 [{i+1}/{min(len(keywords), 5)}]: {keyword}"})
                 
-                explain_prompt = f"""请用简洁的语言解释以下专业概念（100-200字）：
-
-概念：{keyword}
-
-要求：
-1. 用通俗易懂的语言解释
-2. 如果涉及专业术语，需要进一步解释
-3. 可以用类比帮助理解"""
-
+                explain_prompt = fmt_prompt("fastapi_explain", "user", keyword=keyword)
                 explain_messages = [
-                    {"role": "system", "content": "你是一个专业的技术教育专家，擅长用通俗语言解释复杂概念。"},
+                    {"role": "system", "content": fmt_prompt("fastapi_explain", "system")},
                     {"role": "user", "content": explain_prompt}
                 ]
                 
@@ -1319,20 +1361,13 @@ async def ask_question(request: Request):
             # 第三步：综合回答原始问题（流式输出）
             yield sse_event("step", {"text": "🧠 正在综合分析并生成回答..."})
             
-            synthesis_prompt = f"""请根据以下信息，综合回答用户的问题。
-
-问题：{question}
-
-关键词解析：
-{chr(10).join(f'- {ke["keyword"]}: {ke["explanation"][:100]}...' for ke in keyword_explanations)}
-
-请用简洁清晰的语言回答问题（200-400字），并确保：
-1. 直接回答问题
-2. 结合关键词的解释
-3. 逻辑清晰，易于理解"""
-
+            explanations_text = '\n'.join(f'- {ke["keyword"]}: {ke["explanation"][:100]}...' for ke in keyword_explanations)
+            synthesis_prompt = fmt_prompt("fastapi_synthesis", "user",
+                                          question=question,
+                                          analysis=explanations_text,
+                                          explanations=explanations_text)
             synthesis_messages = [
-                {"role": "system", "content": "你是一个专业的技术顾问，擅长综合分析和解答复杂问题。"},
+                {"role": "system", "content": fmt_prompt("fastapi_synthesis", "system")},
                 {"role": "user", "content": synthesis_prompt}
             ]
             

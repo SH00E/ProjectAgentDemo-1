@@ -24,6 +24,7 @@ if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from hello_agents import HelloAgentsLLM
+from prompts import fmt_prompt
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -33,18 +34,7 @@ def translate_text(llm, text, max_retries=3):
     if not text or len(text.strip()) < 5:
         return text
     
-    prompt = f"""将以下航空维修英文文本翻译为中文。
-要求：
-1. 保留专业缩写不翻译（如ACFT, TKOF, PROP, G/S等）
-2. 保留飞机型号不翻译（如CESSNA, BEECH, Boeing 737等）
-3. 保留专有名词（如人名、地名、机场名）
-4. 翻译要简洁准确，符合中文维修报告风格
-
-英文文本：
-{text}
-
-中文翻译："""
-    
+    prompt = fmt_prompt("translate_aviation", "user", text=text)
     messages = [{"role": "user", "content": prompt}]
     
     for attempt in range(max_retries):

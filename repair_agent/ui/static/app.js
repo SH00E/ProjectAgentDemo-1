@@ -216,6 +216,7 @@ async function startDiagnosis() {
     elements.btnDiagnose.disabled = true;
     elements.btnDiagnose.textContent = '⏳ 诊断中...';
     elements.cotArea.innerHTML = '<div class="cot-step">⏳ 开始处理...</div>';
+    elements.evidenceArea.innerHTML = '<em class="placeholder">诊断完成后将显示相关证据...</em>';
     elements.orderArea.classList.add('hidden');
     elements.orderArea.innerHTML = '';
 
@@ -515,6 +516,8 @@ function handleDiagnosis(data) {
         });
         evidenceHtml += '</div>';
         elements.evidenceArea.innerHTML = evidenceHtml;
+    } else {
+        elements.evidenceArea.innerHTML = '<em class="placeholder">未找到相关诊断依据</em>';
     }
 }
 
@@ -2589,6 +2592,8 @@ function handleMaintenanceDiagnosis(data) {
         });
         evidenceHtml += '</div>';
         elements.maintEvidenceArea.innerHTML = evidenceHtml;
+    } else {
+        elements.maintEvidenceArea.innerHTML = '<em class="placeholder">未找到相关维护依据</em>';
     }
 }
 

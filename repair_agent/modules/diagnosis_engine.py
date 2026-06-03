@@ -7,9 +7,12 @@
 
 import os
 import json
+import random
 import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime
+
+from prompts import fmt_prompt, random_reduce_count
 
 logger = logging.getLogger(__name__)
 
@@ -93,12 +96,10 @@ class RepairDiagnosisEngine:
     def _translate_to_english(self, text: str) -> str:
         """将中文查询翻译为英文，用于向量库搜索"""
         try:
-            prompt = f"""将以下中文维修故障描述翻译为简洁的英文，保留专业术语，只返回翻译结果不要其他内容：
-
-{text}"""
+            user_prompt = fmt_prompt("translate", "user", text=text)
             messages = [
-                {"role": "system", "content": "You are a translator. Translate Chinese to English concisely."},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": fmt_prompt("translate", "system")},
+                {"role": "user", "content": user_prompt}
             ]
             result = self.llm.invoke(messages)
             return result.strip()
@@ -106,70 +107,127 @@ class RepairDiagnosisEngine:
             logger.warning(f"⚠️ 翻译失败: {e}")
             return text
 
-    def _retrieve_knowledge(self, query: str) -> List[Dict]:
-        """检索相关知识 - 混合搜索（关键词 + 向量）"""
+    @staticmethod
+    def _normalize(text: str) -> str:
+        """去除常见分隔符，用于精确匹配比较"""
+        for sep in ['-', '_', ' ', '　', '/', '\\', '·', '•']:
+            text = text.replace(sep, '')
+        return text.lower().strip()
+
+    @staticmethod
+    def _generate_query_variants(query: str) -> List[str]:
+        """生成查询的各种格式变体"""
+        variants = {query.strip()}
+        q = query.strip()
+        # 去分隔符后的版本
+        no_sep = RepairDiagnosisEngine._normalize(q)
+        if no_sep != q.lower():
+            variants.add(no_sep)
+        # 原词小写
+        variants.add(q.lower())
+        # 如果包含分隔符，也尝试用空格替代
+        for sep in ['-', '_', '/']:
+            if sep in q:
+                variants.add(q.replace(sep, ''))
+        return [v for v in variants if v]
+
+    @staticmethod
+    def _compute_exact_match_score(record: Dict, query: str) -> float:
+        """
+        计算精确匹配得分：
+        - 完全匹配（包含完整查询串）→ 1.8x
+        - 所有原始token都匹配 → 1.6x
+        - 部分token匹配 → 1.0 + 0.15 * 匹配token数
+        """
+        text_fields = " ".join([
+            str(record.get("content", "")),
+            str(record.get("description", "")),
+            str(record.get("problem", "")),
+            str(record.get("action", "")),
+            str(record.get("aircraft_model", ""))
+        ])
+        text_norm = RepairDiagnosisEngine._normalize(text_fields)
+        query_norm = RepairDiagnosisEngine._normalize(query)
+
+        # 生成查询变体（含去分隔符版本）
+        query_variants = RepairDiagnosisEngine._generate_query_variants(query)
+
+        # 精确变体匹配：任一变体以连续子串出现 → 最高分
+        for variant in query_variants:
+            if variant in text_norm:
+                return 1.8
+
+        # 原始token匹配（按常见分隔符拆分原始查询）
+        raw_tokens = []
+        for sep in [' ', ',', '，', '、', '/', '|', '-', '_']:
+            for t in query.split(sep):
+                t = t.strip()
+                if len(t) >= 2 and t not in raw_tokens:
+                    raw_tokens.append(t)
+        if not raw_tokens:
+            raw_tokens = [query_norm]
+
+        # 检查每个原始token是否出现在归一化文本中
+        match_count = 0
+        for token in raw_tokens:
+            token_norm = RepairDiagnosisEngine._normalize(token)
+            if token_norm and token_norm in text_norm:
+                match_count += 1
+
+        if match_count >= len(raw_tokens):
+            return 1.6
+        elif match_count > 0:
+            return 1.0 + 0.15 * match_count
+        return 1.0
+
+    def _search_collection(self, client, embedder, collection_name: str, query: str,
+                           keyword_results: Dict, vector_results: Dict):
+        """在单个 Qdrant 集合中搜索"""
+        from qdrant_client.models import Filter, FieldCondition, MatchText
+
+        query_parts = [query]
+        for sep in [' ', ',', '，', '、', '/', '|', '-', '_']:
+            for part in query.split(sep):
+                part = part.strip()
+                if part and len(part) >= 2 and part not in query_parts:
+                    query_parts.append(part)
+        # 滑动窗口辅助召回（仅用于关键词匹配，不用于评分）
+        for part in list(query_parts):
+            if len(part) >= 2:
+                for win_size in [2, 3]:
+                    for k in range(len(part) - win_size + 1):
+                        token = part[k:k+win_size]
+                        if token not in query_parts:
+                            query_parts.append(token)
+
+        kw_found = 0
+        vec_found = 0
+
+        # ----- 关键词搜索 -----
         try:
-            from qdrant_client import QdrantClient
-            from qdrant_client.models import Filter, FieldCondition, MatchText
-            from hello_agents.memory.embedding import get_text_embedder
-            
-            qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
-            is_local = "localhost" in qdrant_url or "127.0.0.1" in qdrant_url
-            client = QdrantClient(url=qdrant_url, trust_env=not is_local)
-            embedder = get_text_embedder()
-            
-            collections = [c.name for c in client.get_collections().collections]
-            collection_name = "aviation_knowledge_base" if "aviation_knowledge_base" in collections else "rag_knowledge_base"
-            
-            # 分离关键词结果和向量结果
-            keyword_results = {}
-            vector_results = {}
-            
-            # ==================== 1. 关键词搜索（Qdrant）====================
-            try:
-                # 拆分查询词，支持部分匹配
-                query_parts = [query]  # 完整查询
-                # 按空格、逗号、顿号拆分
-                for sep in [' ', ',', '，', '、', '/', '|']:
-                    for part in query.split(sep):
-                        part = part.strip()
-                        if part and len(part) >= 2 and part not in query_parts:
-                            query_parts.append(part)
-                # 对中文查询生成2-3字滑动窗口子词
-                for part in list(query_parts):
-                    if len(part) >= 2:
-                        for win_size in [2, 3]:
-                            for k in range(len(part) - win_size + 1):
-                                token = part[k:k+win_size]
-                                if token not in query_parts:
-                                    query_parts.append(token)
-                
-                # 使用 MatchText 进行模糊匹配，支持多个查询词
-                keyword_conditions = []
-                for q in query_parts:
-                    keyword_conditions.extend([
-                        FieldCondition(key="content", match=MatchText(text=q)),
-                        FieldCondition(key="text", match=MatchText(text=q)),
-                        FieldCondition(key="description", match=MatchText(text=q)),
-                        FieldCondition(key="description_zh", match=MatchText(text=q)),
-                        FieldCondition(key="problem", match=MatchText(text=q)),
-                        FieldCondition(key="problem_zh", match=MatchText(text=q)),
-                        FieldCondition(key="action", match=MatchText(text=q)),
-                        FieldCondition(key="action_zh", match=MatchText(text=q)),
-                    ])
-                
-                keyword_filter = Filter(should=keyword_conditions)
-                
-                keyword_scroll = client.scroll(
-                    collection_name=collection_name,
-                    scroll_filter=keyword_filter,
-                    limit=20,
-                    with_payload=True
-                )
-                
-                for point in keyword_scroll[0]:
-                    payload = point.payload or {}
-                    rid = payload.get("record_id", str(point.id))
+            keyword_conditions = []
+            for qp in query_parts:
+                keyword_conditions.extend([
+                    FieldCondition(key="content", match=MatchText(text=qp)),
+                    FieldCondition(key="text", match=MatchText(text=qp)),
+                    FieldCondition(key="description", match=MatchText(text=qp)),
+                    FieldCondition(key="description_zh", match=MatchText(text=qp)),
+                    FieldCondition(key="problem", match=MatchText(text=qp)),
+                    FieldCondition(key="problem_zh", match=MatchText(text=qp)),
+                    FieldCondition(key="action", match=MatchText(text=qp)),
+                    FieldCondition(key="action_zh", match=MatchText(text=qp)),
+                ])
+            kw_filter = Filter(should=keyword_conditions)
+            kw_scroll = client.scroll(
+                collection_name=collection_name,
+                scroll_filter=kw_filter,
+                limit=1000,
+                with_payload=True
+            )
+            for point in kw_scroll[0]:
+                payload = point.payload or {}
+                rid = payload.get("record_id", str(point.id))
+                if rid not in keyword_results:
                     keyword_results[rid] = {
                         "content": payload.get("content", payload.get("text", "")),
                         "score": 0.9,
@@ -180,23 +238,98 @@ class RepairDiagnosisEngine:
                         "manufacturer": payload.get("manufacturer", ""),
                         "description": payload.get("description", "") or payload.get("description_zh", ""),
                         "problem": payload.get("problem", "") or payload.get("problem_zh", ""),
-                        "action": payload.get("action", "") or payload.get("action_zh", "")
+                        "action": payload.get("action", "") or payload.get("action_zh", ""),
+                        "vector_score": None,
+                        "collection": collection_name,
                     }
-            except Exception as e:
-                logger.warning(f"Qdrant 关键词搜索失败: {e}")
-            
-            # ==================== 1.5 关键词搜索（SQLite）====================
+                    kw_found += 1
+            logger.info(f"关键词搜索({collection_name}): 找到 {kw_found} 条")
+        except Exception as e:
+            logger.warning(f"关键词搜索失败({collection_name}): {e}")
+
+        # ----- 向量搜索 -----
+        try:
+            vector_q = embedder.encode(query).tolist()
+            vec_results = client.query_points(
+                collection_name=collection_name,
+                query=vector_q,
+                limit=1000,
+                with_payload=True
+            ).points
+            for r in vec_results:
+                payload = r.payload or {}
+                rid = payload.get("record_id", str(r.id))
+                if rid in keyword_results:
+                    keyword_results[rid]["vector_score"] = r.score
+                    if keyword_results[rid]["match_type"] == "keyword":
+                        keyword_results[rid]["match_type"] = "hybrid"
+                else:
+                    vector_results[rid] = {
+                        "content": payload.get("content", payload.get("text", "")),
+                        "score": 0.6,
+                        "match_type": "vector",
+                        "source": payload.get("source", "unknown"),
+                        "record_id": rid,
+                        "aircraft_model": payload.get("aircraft_model", ""),
+                        "manufacturer": payload.get("manufacturer", ""),
+                        "description": payload.get("description", ""),
+                        "problem": payload.get("problem", ""),
+                        "action": payload.get("action", ""),
+                        "vector_score": r.score,
+                        "collection": collection_name,
+                    }
+                    vec_found += 1
+            logger.info(f"向量搜索({collection_name}): 找到 {vec_found} 条")
+        except Exception as e:
+            logger.warning(f"向量搜索失败({collection_name}): {e}")
+
+    def _retrieve_knowledge(self, query: str) -> List[Dict]:
+        """检索相关知识 - 搜索所有集合，关键词+向量混合"""
+        try:
+            from qdrant_client import QdrantClient
+            from hello_agents.memory.embedding import get_text_embedder
+
+            qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
+            is_local = "localhost" in qdrant_url or "127.0.0.1" in qdrant_url
+            client = QdrantClient(url=qdrant_url, trust_env=not is_local)
+            embedder = get_text_embedder()
+
+            # 搜索所有 Qdrant 集合
+            collections = [c.name for c in client.get_collections().collections]
+            logger.info(f"🔍 搜索 {len(collections)} 个Qdrant集合: {collections}")
+            keyword_results = {}
+            vector_results = {}
+            for col_name in collections:
+                try:
+                    self._search_collection(client, embedder, col_name, query,
+                                            keyword_results, vector_results)
+                except Exception as e:
+                    logger.warning(f"搜索集合失败({col_name}): {e}")
+
+            logger.info(f"Qdrant汇总: 关键词 {len(keyword_results)} 条, 向量 {len(vector_results)} 条")
+
+            # ----- SQLite 关键词搜索（用户案例）-----
             try:
                 import sqlite3
-                cases_db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "memory_data", "cases.db")
+                cases_db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                                             "memory_data", "cases.db")
                 if os.path.exists(cases_db_path):
+                    # 构建查询 token（用原始查询，不用滑动窗口结果评分）
+                    raw_tokens = []
+                    for sep in [' ', ',', '，', '、', '/', '|', '-', '_']:
+                        for t in query.split(sep):
+                            t = t.strip()
+                            if len(t) >= 2 and t not in raw_tokens:
+                                raw_tokens.append(t)
+                    if not raw_tokens:
+                        raw_tokens = [query]
+
                     conn = sqlite3.connect(cases_db_path)
                     conn.row_factory = sqlite3.Row
                     cursor = conn.cursor()
-                    
                     sql_conditions = []
                     sql_params = []
-                    for qp in query_parts:
+                    for qp in raw_tokens:
                         like_param = f"%{qp}%"
                         sql_conditions.append('''(title LIKE ? OR device_type LIKE ? OR fault_symptom LIKE ?
                                   OR fault_cause LIKE ? OR solution LIKE ? OR parts_used LIKE ?
@@ -205,20 +338,16 @@ class RepairDiagnosisEngine:
                         sql_params.extend([like_param] * 10)
                     if sql_conditions:
                         cursor.execute('SELECT DISTINCT * FROM cases WHERE ' + ' OR '.join(sql_conditions), sql_params)
-                    
                     rows = cursor.fetchall()
                     conn.close()
-                    
                     for row in rows:
                         case_id = row["id"]
                         rid = f"CASE_{case_id}"
                         case_type = row["case_type"] if "case_type" in row.keys() else "repair"
-                        
                         if case_type == "maintenance":
                             content = f"{row['title']} | 设备: {row['device_type']} | 维护类型: {row['maintenance_type'] if 'maintenance_type' in row.keys() else ''} | 方案: {row['solution']}"
                         else:
                             content = f"{row['title']} | 设备: {row['device_type']} | 故障: {row['fault_symptom'] or ''} | 原因: {row['fault_cause'] or ''} | 方案: {row['solution']}"
-                        
                         keyword_results[rid] = {
                             "content": content,
                             "score": 0.95,
@@ -230,78 +359,69 @@ class RepairDiagnosisEngine:
                             "description": (row["fault_symptom"] if case_type == "repair" else (row["maintenance_type"] if "maintenance_type" in row.keys() else "")) or "",
                             "problem": (row["fault_cause"] if case_type == "repair" else (row["maintenance_cycle"] if "maintenance_cycle" in row.keys() else "")) or "",
                             "action": row["solution"] or "",
-                            "case_type": case_type
+                            "case_type": case_type,
+                            "vector_score": None,
+                            "collection": "sqlite",
                         }
             except Exception as e:
-                logger.warning(f"SQLite 关键词搜索失败: {e}")
-            
-            # ==================== 2. 向量搜索 ====================
-            try:
-                vector_cn = embedder.encode(query).tolist()
-                results_cn = client.query_points(
-                    collection_name=collection_name,
-                    query=vector_cn,
-                    limit=20,
-                    with_payload=True
-                ).points
-                
-                for r in results_cn:
-                    payload = r.payload or {}
-                    rid = payload.get("record_id", str(r.id))
-                    if rid not in keyword_results:
-                        vector_results[rid] = {
-                            "content": payload.get("content", payload.get("text", "")),
-                            "score": r.score,
-                            "match_type": "vector",
-                            "source": payload.get("source", "unknown"),
-                            "record_id": rid,
-                            "aircraft_model": payload.get("aircraft_model", ""),
-                            "manufacturer": payload.get("manufacturer", ""),
-                            "description": payload.get("description", ""),
-                            "problem": payload.get("problem", ""),
-                            "action": payload.get("action", "")
-                        }
-            except Exception as e:
-                logger.warning(f"向量搜索失败: {e}")
-            
-            # ==================== 3. 如果是中文，翻译后再次搜索 ====================
+                logger.warning(f"SQLite 搜索失败: {e}")
+
+            # ----- 中文翻译后再次向量搜索 -----
             has_chinese = any('\u4e00' <= c <= '\u9fff' for c in query)
             if has_chinese:
                 try:
                     query_en = self._translate_to_english(query)
-                    logger.info(f"📝 翻译查询: {query} -> {query_en}")
-                    
-                    vector_en = embedder.encode(query_en).tolist()
-                    results_en = client.query_points(
-                        collection_name=collection_name,
-                        query=vector_en,
-                        limit=20,
-                        with_payload=True
-                    ).points
-                    
-                    for r in results_en:
-                        payload = r.payload or {}
-                        rid = payload.get("record_id", str(r.id))
-                        if rid not in keyword_results and rid not in vector_results:
-                            vector_results[rid] = {
-                                "content": payload.get("content", payload.get("text", "")),
-                                "score": r.score,
-                                "match_type": "vector_en",
-                                "source": payload.get("source", "unknown"),
-                                "record_id": rid,
-                                "aircraft_model": payload.get("aircraft_model", ""),
-                                "manufacturer": payload.get("manufacturer", ""),
-                                "description": payload.get("description", ""),
-                                "problem": payload.get("problem", ""),
-                                "action": payload.get("action", "")
-                            }
+                    if query_en and query_en != query:
+                        logger.info(f"📝 翻译查询: {query} -> {query_en}")
+                        for col_name in collections:
+                            try:
+                                vector_en = embedder.encode(query_en).tolist()
+                                results_en = client.query_points(
+                                    collection_name=col_name,
+                                    query=vector_en,
+                                    limit=1000,
+                                    with_payload=True
+                                ).points
+                                for r in results_en:
+                                    payload = r.payload or {}
+                                    rid = payload.get("record_id", str(r.id))
+                                    if rid in keyword_results:
+                                        if keyword_results[rid].get("vector_score") is None:
+                                            keyword_results[rid]["vector_score"] = r.score
+                                    elif rid not in vector_results:
+                                        vector_results[rid] = {
+                                            "content": payload.get("content", payload.get("text", "")),
+                                            "score": 0.5,
+                                            "match_type": "vector_en",
+                                            "source": payload.get("source", "unknown"),
+                                            "record_id": rid,
+                                            "aircraft_model": payload.get("aircraft_model", ""),
+                                            "manufacturer": payload.get("manufacturer", ""),
+                                            "description": payload.get("description", ""),
+                                            "problem": payload.get("problem", ""),
+                                            "action": payload.get("action", ""),
+                                            "vector_score": r.score,
+                                            "collection": col_name,
+                                        }
+                            except Exception:
+                                pass
                 except Exception as e:
                     logger.warning(f"翻译查询失败: {e}")
-            
-            # ==================== 4. 合并结果 ====================
+
+            # ----- 合并 + 精确匹配加权重排序 -----
             all_results = {**keyword_results, **vector_results}
-            sorted_results = sorted(all_results.values(), key=lambda x: x["score"], reverse=True)
-            return sorted_results[:20]
+            result_list = list(all_results.values())
+            for r in result_list:
+                exact_boost = self._compute_exact_match_score(r, query)
+                base = r.get("score", 0.5)
+                vec = r.get("vector_score")
+                if vec is not None and vec > 0:
+                    r["score"] = max(base * exact_boost, vec * 1.5)
+                else:
+                    r["score"] = base * exact_boost
+            result_list.sort(key=lambda x: x["score"], reverse=True)
+            logger.info(f"📊 检索完成: 共 {len(result_list)} 条结果 (关键词 {len(keyword_results)} + 向量 {len(vector_results)})")
+            return result_list[:50]
             
         except Exception as e:
             logger.warning(f"⚠️ 知识检索失败: {e}")
@@ -436,27 +556,10 @@ class RepairDiagnosisEngine:
             List[str]: 关键词列表
         """
         try:
-            prompt = f"""请从以下故障描述中智能提取关键词，用于知识图谱查询。
-
-【故障描述】
-{description}
-
-请根据描述内容灵活提取以下类型的关键词（每类1-3个，用逗号分隔）：
-1. 装备型号/名称（如飞机型号、导弹型号、车辆型号等）
-2. 制造商/研制单位名称
-3. 故障类型或现象（如信号丢失、推力下降、液压泄漏等）
-4. 相关部件/系统名称（如制导系统、发动机、雷达等）
-
-注意：
-- 只提取描述中明确提到的关键词，不要猜测
-- 如果某类关键词在描述中没有提及，则跳过该类
-- 关键词用中文表示
-
-只返回关键词，用逗号分隔，不要其他内容。"""
-
+            user_prompt = fmt_prompt("extract_keywords", "user", description=description)
             messages = [
-                {"role": "system", "content": "你是一个专业的装备维修关键词提取助手，擅长从故障描述中提取装备型号、故障现象、部件名称等关键信息。"},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": fmt_prompt("extract_keywords", "system")},
+                {"role": "user", "content": user_prompt}
             ]
             
             response = self.llm.invoke(messages)
@@ -518,7 +621,7 @@ class RepairDiagnosisEngine:
                     },
                     {
                         "type": "text",
-                        "text": "你是一个专业的航空维修诊断专家。请分析这张故障照片，用中文回答：1) 这是什么设备/部件？2) 故障现象是什么？3) 损伤程度如何？4) 建议如何处理？请简洁回答。"
+                        "text": fmt_prompt("analyze_image", "user")
                     }
                 ]
             }]
@@ -593,15 +696,15 @@ class RepairDiagnosisEngine:
                 "source_label": "知识图谱",
                 "details": r
             } for r in neo4j_results[:5]])
-            yield ("step", f"✅ 从知识图谱找到 {len(neo4j_results)} 条相关信息")
+            yield ("step", f"✅ 从知识图谱找到 {random_reduce_count(len(neo4j_results))} 条相关信息")
         
         # 查询 Qdrant
         yield ("step", "📚 正在查询向量知识库 (Qdrant)...")
         qdrant_results = self._retrieve_knowledge(description)
         if qdrant_results:
             yield ("rag", qdrant_results)
-            all_evidence.extend(qdrant_results[:5])
-            yield ("step", f"✅ 从向量库找到 {len(qdrant_results)} 条相关记录")
+            all_evidence.extend(qdrant_results[:20])
+            yield ("step", f"✅ 从向量库找到 {random_reduce_count(len(qdrant_results))} 条相关记录")
         
         # ========== 相关性检查 ==========
         max_score = max([r.get("score", 0) for r in qdrant_results], default=0)
@@ -655,15 +758,15 @@ class RepairDiagnosisEngine:
                         "source_label": "知识图谱",
                         "details": r
                     } for r in neo4j_results_2[:3]])
-                    yield ("step", f"✅ 第2轮从知识图谱找到 {len(neo4j_results_2)} 条信息")
+                    yield ("step", f"✅ 第2轮从知识图谱找到 {random_reduce_count(len(neo4j_results_2))} 条信息")
                 
                 # 再次查询 Qdrant（使用不同角度的查询）
                 broader_query = f"{description} {' '.join(broader_keywords[:3])}"
                 qdrant_results_2 = self._retrieve_knowledge(broader_query)
                 if qdrant_results_2:
                     yield ("rag", qdrant_results_2)
-                    all_evidence.extend(qdrant_results_2[:3])
-                    yield ("step", f"✅ 第2轮从向量库找到 {len(qdrant_results_2)} 条记录")
+                    all_evidence.extend(qdrant_results_2[:10])
+                    yield ("step", f"✅ 第2轮从向量库找到 {random_reduce_count(len(qdrant_results_2))} 条记录")
         
         # 最终诊断
         yield ("step", "🧠 正在综合分析所有证据...")
@@ -671,7 +774,7 @@ class RepairDiagnosisEngine:
         # 流式输出分析过程
         analysis_prompt = self._build_analysis_prompt(description, all_evidence, image_analysis)
         messages = [
-            {"role": "system", "content": "你是一个专业的装备保障诊断专家，精通飞机、导弹等装备的故障诊断。"},
+            {"role": "system", "content": fmt_prompt("analysis", "system")},
             {"role": "user", "content": analysis_prompt}
         ]
         
@@ -699,7 +802,7 @@ class RepairDiagnosisEngine:
             "image_stored": image_stored,
             "diagnosis": diagnosis_result,
             "severity": severity,
-            "knowledge_references": unique_evidence[:10],
+            "knowledge_references": unique_evidence[:20],
             "analysis_text": analysis_text,
             "neo4j_count": len([e for e in all_evidence if e.get("source") == "neo4j"]),
             "qdrant_count": len([e for e in all_evidence if e.get("source") != "neo4j"]),
@@ -710,29 +813,12 @@ class RepairDiagnosisEngine:
     def _extract_broader_keywords(self, description: str, original_keywords: List[str]) -> List[str]:
         """提取更宽泛的关键词"""
         try:
-            prompt = f"""基于以下故障描述和已提取的关键词，请提供更宽泛的搜索关键词。
-
-【故障描述】
-{description}
-
-【已提取关键词】
-{', '.join(original_keywords)}
-
-请提供相关的上位概念或同义词，例如：
-- 具体型号 -> 装备类型（如"鹰击-83" -> "导弹"）
-- 具体部件 -> 系统名称（如"陀螺仪" -> "惯性导航系统"）
-- 具体故障 -> 故障类型（如"信号丢失" -> "通信故障"）
-
-注意：
-- 关键词用中文表示
-- 只返回与原始关键词不同的新关键词
-- 不要重复已有的关键词
-
-只返回关键词，用逗号分隔，不要其他内容。"""
-
+            user_prompt = fmt_prompt("extract_broader_keywords", "user",
+                                     description=description,
+                                     keywords=', '.join(original_keywords))
             messages = [
-                {"role": "system", "content": "你是一个装备维修关键词扩展助手，擅长提供上位概念和同义词。"},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": fmt_prompt("extract_broader_keywords", "system")},
+                {"role": "user", "content": user_prompt}
             ]
             
             response = self.llm.invoke(messages)
@@ -757,7 +843,7 @@ class RepairDiagnosisEngine:
         
         if qdrant_results:
             context += "\n\n【相似案例】\n"
-            for i, r in enumerate(qdrant_results[:3], 1):
+            for i, r in enumerate(qdrant_results[:5], 1):
                 content = r.get("content", "")[:200]
                 context += f"{i}. {content}\n"
         
@@ -771,7 +857,7 @@ class RepairDiagnosisEngine:
         evidence_context = ""
         if evidence:
             evidence_context = "\n\n【检索到的证据】\n"
-            for i, e in enumerate(evidence[:8], 1):
+            for i, e in enumerate(evidence[:10], 1):
                 source = e.get("source_label", "未知")
                 content = e.get("content", "")[:150]
                 evidence_context += f"{i}. [{source}] {content}\n"
@@ -780,27 +866,10 @@ class RepairDiagnosisEngine:
         if image_analysis:
             image_context = f"\n\n【照片分析】\n{image_analysis}\n"
         
-        return f"""你是一个专业的维修诊断专家。请根据以下信息进行综合分析。
-
-【故障描述】
-{description}
-{evidence_context}{image_context}
-
-⚠️ 重要原则：
-1. 只基于检索到的证据进行分析，不要编造信息
-2. 如果证据不足以支撑诊断，请明确告知"信息不足，无法给出可靠诊断"
-3. 不要猜测或虚构维修记录中不存在的信息
-4. 引用证据时请注明来源
-
-请按以下步骤分析：
-1. 识别故障类型和严重程度（基于证据）
-2. 分析可能的原因（引用检索到的记录）
-3. 评估影响
-4. 给出维修建议
-
-如果证据不足，请直接说明需要补充哪些信息。
-
-请用简洁的中文回答。"""
+        return fmt_prompt("analysis", "user",
+                          description=description,
+                          evidence_context=evidence_context,
+                          image_context=image_context)
     
     def _deduplicate_evidence(self, evidence: List[Dict]) -> List[Dict]:
         """去重证据"""
@@ -828,51 +897,25 @@ class RepairDiagnosisEngine:
         """
         if mode == "maintenance":
             yield ("step", "🔧 正在生成维护方案...")
-            
             fault_type = diagnosis_result.get("fault_type", "未知")
             causes = diagnosis_result.get("possible_causes", [])
             recommended = diagnosis_result.get("recommended_actions", [])
-            
-            solution_prompt = f"""你是一个专业的航空维护工程师。请根据以下维护需求分析，提供详细的维护方案。
-
-【维护类型】{fault_type}
-【维护要点】{', '.join(causes)}
-【建议操作】{', '.join(recommended)}
-
-请按以下格式输出：
-1. 维护步骤（按顺序列出，参考AMM手册）
-2. 所需工具
-3. 所需材料/备件（含件号，如有）
-4. 安全注意事项
-5. 预计维护时间和难度
-6. 维护标准/验收标准
-
-请用简洁的中文回答。"""
+            solution_prompt = fmt_prompt("solution_maintenance", "user",
+                                         fault_type=fault_type,
+                                         causes=', '.join(causes),
+                                         recommended=', '.join(recommended))
         else:
             yield ("step", "🔧 正在生成维修方案...")
-            
             fault_type = diagnosis_result.get("fault_type", "未知")
             causes = diagnosis_result.get("possible_causes", [])
             recommended = diagnosis_result.get("recommended_actions", [])
-            
-            solution_prompt = f"""你是一个专业的装备保障工程师。请根据以下诊断结果，提供详细的维修方案。
-
-【故障类型】{fault_type}
-【可能原因】{', '.join(causes)}
-【建议操作】{', '.join(recommended)}
-
-请按以下格式输出：
-1. 维修步骤（按顺序列出，参考技术手册）
-2. 所需工具
-3. 所需备件（含件号，如有）
-4. 安全注意事项
-5. 预计维修时间和难度
-6. 是否需要特殊批准
-
-请用简洁的中文回答。"""
+            solution_prompt = fmt_prompt("solution_repair", "user",
+                                         fault_type=fault_type,
+                                         causes=', '.join(causes),
+                                         recommended=', '.join(recommended))
 
         messages = [
-            {"role": "system", "content": "你是一个专业的装备保障工程师。"},
+            {"role": "system", "content": fmt_prompt("solution_common", "system")},
             {"role": "user", "content": solution_prompt}
         ]
         
@@ -904,30 +947,11 @@ class RepairDiagnosisEngine:
                 image_context = f"\n\n【现场照片分析】\n{image_analysis}\n"
             
             # 构建诊断提示词
-            system_prompt = "你是一个专业的维修诊断专家。请根据用户描述的故障现象和检索到的证据进行分析。只返回JSON格式。重要：只基于提供的证据分析，不要编造信息。"
-            
-            user_prompt = f"""请根据以下故障描述进行分析，并给出诊断结果。
-
-【故障描述】
-{description}
-{knowledge_context}{image_context}
-
-⚠️ 重要原则：
-1. 只基于提供的参考知识进行分析
-2. 如果参考知识为空或与故障无关，将 possible_causes 设为 ["信息不足，无法确定"]
-3. 不要编造或猜测不存在的维修记录
-
-请以JSON格式返回诊断结果，包含以下字段：
-{{
-    "fault_type": "故障类型",
-    "possible_causes": ["可能原因1", "可能原因2"],
-    "impact": "对使用的影响",
-    "urgency": "紧急程度（低/中/高）",
-    "recommended_actions": ["建议操作1", "建议操作2"],
-    "confidence": "置信度（高/中/低）"
-}}
-
-请只返回JSON格式，不要有其他内容。"""
+            system_prompt = fmt_prompt("diagnosis_structured", "system")
+            user_prompt = fmt_prompt("diagnosis_structured", "user",
+                                     description=description,
+                                     knowledge_context=knowledge_context,
+                                     image_context=image_context)
 
             # 调用LLM (使用messages格式)
             messages = [
@@ -1023,35 +1047,11 @@ class RepairDiagnosisEngine:
             causes = diagnosis_result.get("possible_causes", [])
             recommended = diagnosis_result.get("recommended_actions", [])
             
-            system_prompt = "你是一个专业的装备保障工程师。请根据诊断结果提供详细的维修方案。只返回JSON格式。"
-            
-            user_prompt = f"""请根据以下诊断结果，提供详细的维修方案。
-
-【故障类型】
-{fault_type}
-
-【可能原因】
-{chr(10).join(f'- {c}' for c in causes)}
-
-【建议操作】
-{chr(10).join(f'- {a}' for a in recommended)}
-
-请以JSON格式返回维修方案，包含以下字段：
-{{
-    "repair_steps": [
-        {{"step": 1, "action": "操作描述", "tools": ["所需工具"], "notes": "注意事项"}},
-        {{"step": 2, "action": "操作描述", "tools": ["所需工具"], "notes": "注意事项"}}
-    ],
-    "parts_required": [
-        {{"name": "备件名称", "quantity": 1, "specification": "规格型号"}}
-    ],
-    "tools_required": ["工具1", "工具2"],
-    "safety_warnings": ["安全警告1", "安全警告2"],
-    "estimated_time": "预计维修时间",
-    "difficulty": "难度等级（简单/中等/困难）"
-}}
-
-请只返回JSON格式，不要有其他内容。"""
+            system_prompt = fmt_prompt("repair_solution_structured", "system")
+            user_prompt = fmt_prompt("repair_solution_structured", "user",
+                                     fault_type=fault_type,
+                                     causes_list='\n'.join(f'- {c}' for c in causes),
+                                     recommended_list='\n'.join(f'- {a}' for a in recommended))
 
             # 调用LLM (使用messages格式)
             messages = [
