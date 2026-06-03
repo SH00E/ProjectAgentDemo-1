@@ -68,7 +68,7 @@ class RepairDiagnosisEngine:
                 image_stored = True
             
             # 步骤3: 使用LLM进行诊断分析
-            diagnosis_result = self._analyze_with_llm(description, knowledge_results, image_analysis)
+            diagnosis_result = self._analyze_with_llm(description, knowledge_results, image_analysis, mode)
             
             # 步骤4: 评估损伤等级
             severity = self.assess_severity(diagnosis_result)
