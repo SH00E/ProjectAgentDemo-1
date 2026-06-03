@@ -1295,7 +1295,15 @@ async def ask_question(request: Request):
             # 第二步：解释每个关键词
             keyword_explanations = []
             for i, kw in enumerate(keywords[:5]):
-                keyword = kw.get("keyword", "")
+                if isinstance(kw, str):
+                    keyword = kw.strip()
+                    relation = "核心概念"
+                elif isinstance(kw, dict):
+                    keyword = (kw.get("keyword") or kw.get("word") or "").strip()
+                    relation = kw.get("relation", "")
+                else:
+                    continue
+
                 if not keyword:
                     continue
                 
@@ -1310,7 +1318,7 @@ async def ask_question(request: Request):
                 explanation = llm.invoke(explain_messages)
                 keyword_explanations.append({
                     "keyword": keyword,
-                    "relation": kw.get("relation", ""),
+                    "relation": relation,
                     "explanation": explanation
                 })
             

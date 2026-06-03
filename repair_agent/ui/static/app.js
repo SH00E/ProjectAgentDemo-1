@@ -2853,16 +2853,22 @@ function handleQASSEEvent(eventType, dataStr) {
                     elements.qaAnswer.appendChild(keywordsDiv);
                 }
                 
+                const keywords = Array.isArray(data.keywords) ? data.keywords : [];
                 let keywordsHtml = '<h3>🔑 关键词解析</h3>';
-                data.keywords.forEach((kw, i) => {
+                if (keywords.length === 0) {
+                    keywordsHtml += '<div class="qa-empty">未解析到关键词，请尝试补充更具体的问题描述。</div>';
+                }
+
+                keywords.forEach((kw, i) => {
+                    const keyword = kw.keyword || kw.word || '';
                     keywordsHtml += `
                         <div class="qa-keyword-item">
                             <div class="qa-keyword-title">
                                 <span class="qa-keyword-num">${i + 1}</span>
-                                <span class="qa-keyword-name">${escapeHtml(kw.keyword)}</span>
-                                <span class="qa-keyword-relation">${escapeHtml(kw.relation)}</span>
+                                <span class="qa-keyword-name">${escapeHtml(keyword)}</span>
+                                <span class="qa-keyword-relation">${escapeHtml(kw.relation || '')}</span>
                             </div>
-                            <div class="qa-keyword-explanation">${escapeHtml(kw.explanation)}</div>
+                            <div class="qa-keyword-explanation">${escapeHtml(kw.explanation || '')}</div>
                         </div>
                     `;
                 });

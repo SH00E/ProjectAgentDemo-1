@@ -2440,6 +2440,14 @@ textarea {
     line-height: 1.6;
 }
 
+.qa-empty {
+    padding: 12px;
+    background: #f8fafc;
+    border-radius: 8px;
+    color: #64748b;
+    font-size: 14px;
+}
+
 .qa-answer-content {
     font-size: 15px;
     color: #1e293b;
