@@ -509,7 +509,29 @@ async def search_knowledge(request: Request):
         def _normalize(text):
             for sep in ['-', '_', ' ', '　', '/', '\\', '·', '•']:
                 text = text.replace(sep, '')
+            for particle in ['的', '了']:
+                text = text.replace(particle, '')
             return text.lower().strip()
+
+        def _clean_score_tokens(tokens):
+            ignored_tokens = {
+                "装备型号", "装备名称", "型号", "名称", "系统名称", "部件名称", "相关部件",
+                "故障现象", "故障类型", "维护类型", "维护内容", "关键词", "无"
+            }
+            cleaned = []
+            ignored_norms = {_normalize(t) for t in ignored_tokens}
+            for token in tokens:
+                token = str(token).strip()
+                if not token or token in ignored_tokens:
+                    continue
+                if len(token) > 24:
+                    continue
+                token_norm = _normalize(token)
+                if not token_norm or token_norm in ignored_norms:
+                    continue
+                if token not in cleaned:
+                    cleaned.append(token)
+            return cleaned
 
         def _split_query_tokens(q):
             tokens = []
@@ -609,7 +631,7 @@ async def search_knowledge(request: Request):
             kw_response = llm.invoke(kw_messages)
             extracted = [k.strip() for k in kw_response.split(",") if k.strip() and k.strip() != "无"]
             if extracted:
-                score_tokens = list(extracted)
+                score_tokens = _clean_score_tokens(extracted)
                 for term in _split_query_tokens(query):
                     if term not in score_tokens:
                         score_tokens.append(term)
@@ -619,6 +641,7 @@ async def search_knowledge(request: Request):
         except Exception as e:
             logger.warning(f"关键词提取失败，使用拆分: {e}")
             score_tokens = _split_query_tokens(query)
+        score_tokens = _clean_score_tokens(score_tokens)
         query_tokens = _expand_recall_tokens(score_tokens)
 
         # ===== 关键词召回 =====

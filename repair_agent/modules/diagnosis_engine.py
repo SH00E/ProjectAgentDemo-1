@@ -112,7 +112,30 @@ class RepairDiagnosisEngine:
         """去除常见分隔符，用于精确匹配比较"""
         for sep in ['-', '_', ' ', '　', '/', '\\', '·', '•']:
             text = text.replace(sep, '')
+        for particle in ['的', '了']:
+            text = text.replace(particle, '')
         return text.lower().strip()
+
+    @staticmethod
+    def _clean_score_tokens(tokens: List[str]) -> List[str]:
+        """清理不应参与相关性分母的提示词标签和泛词。"""
+        ignored_tokens = {
+            "装备型号", "装备名称", "型号", "名称", "系统名称", "部件名称", "相关部件",
+            "故障现象", "故障类型", "维护类型", "维护内容", "关键词", "无"
+        }
+        cleaned = []
+        for token in tokens:
+            token = str(token).strip()
+            if not token or token in ignored_tokens:
+                continue
+            if len(token) > 24:
+                continue
+            token_norm = RepairDiagnosisEngine._normalize(token)
+            if not token_norm or token_norm in {RepairDiagnosisEngine._normalize(t) for t in ignored_tokens}:
+                continue
+            if token not in cleaned:
+                cleaned.append(token)
+        return cleaned
 
     @staticmethod
     def split_query_tokens(query: str) -> List[str]:
@@ -293,12 +316,13 @@ class RepairDiagnosisEngine:
 
             # 使用预提取的关键词计分；滑动窗口只用于召回，避免长句相关性被稀释
             if keywords:
-                score_tokens = list(keywords)
+                score_tokens = self._clean_score_tokens(keywords)
                 for term in self.split_query_tokens(query):
                     if term not in score_tokens:
                         score_tokens.append(term)
             else:
                 score_tokens = self.split_query_tokens(query)
+            score_tokens = self._clean_score_tokens(score_tokens)
             query_tokens = self.expand_recall_tokens(score_tokens)
             logger.info(f"🔍 计分 tokens ({len(score_tokens)}): {score_tokens[:10]}...")
             logger.info(f"🔍 召回 tokens ({len(query_tokens)}): {query_tokens[:10]}...")
