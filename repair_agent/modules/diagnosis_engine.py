@@ -9,6 +9,7 @@ import os
 import json
 import random
 import logging
+import re
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
@@ -115,23 +116,52 @@ class RepairDiagnosisEngine:
 
     @staticmethod
     def split_query_tokens(query: str) -> List[str]:
-        """拆分为有意义的 tokens: 原始查询 + 分隔符拆分 + 2-3字滑动窗口"""
-        tokens = [query]
+        """拆分为核心 tokens: 原始查询 + 分隔符拆分，不包含滑动窗口。"""
+        tokens = []
+        if 2 <= len(query) <= 24:
+            tokens.append(query)
         # 按分隔符拆分
         for sep in [' ', ',', '，', '、', '/', '|', '-', '_']:
             for part in query.split(sep):
                 part = part.strip()
-                if part and len(part) >= 2 and part not in tokens:
+                if part and 2 <= len(part) <= 24 and part not in tokens:
                     tokens.append(part)
+        for term in RepairDiagnosisEngine._extract_domain_terms(query):
+            if term not in tokens:
+                tokens.append(term)
+        return tokens
+
+    @staticmethod
+    def _extract_domain_terms(query: str) -> List[str]:
+        """提取常见装备维修短语，避免长句查询被滑窗 token 稀释。"""
+        terms = []
+        domain_terms = [
+            "空地导弹", "空舰导弹", "空射巡航导弹", "制导系统", "控制系统", "动力系统",
+            "电气系统", "引战系统", "弹体结构", "电视", "红外", "双模导引头", "导引头",
+            "光轴", "光轴偏差", "光轴平行性", "融合偏差", "精确制导", "频综器", "频率综合器",
+            "惯性导航", "惯组", "雷达", "数据链", "校准", "更换", "失锁", "漂移", "偏差"
+        ]
+        for term in domain_terms:
+            if term in query and term not in terms:
+                terms.append(term)
+        for term in re.findall(r"[A-Za-z]+-?\d+[A-Za-z0-9-]*", query):
+            if term not in terms:
+                terms.append(term)
+        return terms
+
+    @staticmethod
+    def expand_recall_tokens(tokens: List[str]) -> List[str]:
+        """扩展召回 tokens；滑动窗口只用于召回，不参与相关性分母。"""
+        recall_tokens = list(tokens)
         # 滑动窗口（仅对长度>=4的片段，避免太短的无意义token）
         for part in list(tokens):
             if len(part) >= 4:
                 for win_size in [2, 3]:
                     for k in range(len(part) - win_size + 1):
                         token = part[k:k+win_size]
-                        if token not in tokens:
-                            tokens.append(token)
-        return tokens
+                        if token not in recall_tokens:
+                            recall_tokens.append(token)
+        return recall_tokens
 
     @staticmethod
     def compute_keyword_score(record: Dict, query_tokens: List[str], full_query: str) -> tuple:
@@ -140,13 +170,12 @@ class RepairDiagnosisEngine:
         
         返回: (score, matched_count, total_count)
         """
-        text = " ".join([
-            str(record.get("content", "")),
-            str(record.get("description", "")),
-            str(record.get("problem", "")),
-            str(record.get("action", "")),
-            str(record.get("aircraft_model", ""))
-        ])
+        content = str(record.get("content", ""))
+        description = str(record.get("description", ""))
+        problem = str(record.get("problem", ""))
+        action = str(record.get("action", ""))
+        aircraft_model = str(record.get("aircraft_model", ""))
+        text = " ".join([content, description, problem, action, aircraft_model])
         text_norm = RepairDiagnosisEngine._normalize(text)
 
         total = len(query_tokens)
@@ -154,12 +183,30 @@ class RepairDiagnosisEngine:
             return 0.0, 0, 0
 
         matched = 0
+        matched_weight = 0.0
         for token in query_tokens:
             token_norm = RepairDiagnosisEngine._normalize(token)
-            if token_norm and token_norm in text_norm:
+            if not token_norm:
+                continue
+
+            field_weight = 0.0
+            if token_norm in RepairDiagnosisEngine._normalize(aircraft_model):
+                field_weight = max(field_weight, 1.6)
+            if token_norm in RepairDiagnosisEngine._normalize(description):
+                field_weight = max(field_weight, 1.35)
+            if token_norm in RepairDiagnosisEngine._normalize(problem):
+                field_weight = max(field_weight, 1.35)
+            if token_norm in RepairDiagnosisEngine._normalize(action):
+                field_weight = max(field_weight, 1.1)
+            if token_norm in RepairDiagnosisEngine._normalize(content):
+                field_weight = max(field_weight, 1.2)
+
+            if field_weight > 0:
                 matched += 1
+                matched_weight += field_weight
 
         ratio = matched / total
+        weighted_ratio = matched_weight / total
 
         # boost: 全部命中 > 大部分命中 > 部分命中
         if matched == total and total > 1:
@@ -174,7 +221,7 @@ class RepairDiagnosisEngine:
         if full_query_norm and full_query_norm in text_norm:
             boost = max(boost, 1.8)
 
-        score = ratio * boost
+        score = weighted_ratio * boost
         return score, matched, total
 
     def _search_collection(self, client, collection_name: str, query_parts: List[str],
@@ -244,20 +291,17 @@ class RepairDiagnosisEngine:
             # 确定要排除的案例类型
             exclude_case_type = "maintenance" if mode == "repair" else "repair"
 
-            # 使用预提取的关键词，或从query拆分
+            # 使用预提取的关键词计分；滑动窗口只用于召回，避免长句相关性被稀释
             if keywords:
-                # 关键词 + 每个关键词的2-3字滑动窗口
-                query_tokens = list(keywords)
-                for kw in keywords:
-                    if len(kw) >= 4:
-                        for win_size in [2, 3]:
-                            for k in range(len(kw) - win_size + 1):
-                                token = kw[k:k+win_size]
-                                if token not in query_tokens:
-                                    query_tokens.append(token)
+                score_tokens = list(keywords)
+                for term in self.split_query_tokens(query):
+                    if term not in score_tokens:
+                        score_tokens.append(term)
             else:
-                query_tokens = self.split_query_tokens(query)
-            logger.info(f"🔍 检索 tokens ({len(query_tokens)}): {query_tokens[:10]}...")
+                score_tokens = self.split_query_tokens(query)
+            query_tokens = self.expand_recall_tokens(score_tokens)
+            logger.info(f"🔍 计分 tokens ({len(score_tokens)}): {score_tokens[:10]}...")
+            logger.info(f"🔍 召回 tokens ({len(query_tokens)}): {query_tokens[:10]}...")
 
             # ===== 第一步：关键词召回 =====
             collections = [c.name for c in client.get_collections().collections]
@@ -284,12 +328,9 @@ class RepairDiagnosisEngine:
                 cases_db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
                                              "memory_data", "cases.db")
                 if os.path.exists(cases_db_path):
-                    raw_tokens = [query]
-                    for sep in [' ', ',', '，', '、', '/', '|', '-', '_']:
-                        for t in query.split(sep):
-                            t = t.strip()
-                            if t and len(t) >= 2 and t not in raw_tokens:
-                                raw_tokens.append(t)
+                    raw_tokens = list(score_tokens)
+                    if query not in raw_tokens:
+                        raw_tokens.insert(0, query)
 
                     conn = sqlite3.connect(cases_db_path)
                     conn.row_factory = sqlite3.Row
@@ -337,7 +378,7 @@ class RepairDiagnosisEngine:
             # ===== 第三步：关键词计分 =====
             result_list = list(keyword_results.values())
             for r in result_list:
-                score, matched, total = self.compute_keyword_score(r, query_tokens, query)
+                score, matched, total = self.compute_keyword_score(r, score_tokens, query)
                 r["score"] = score
                 r["matched_tokens"] = matched
                 r["total_tokens"] = total

@@ -12,6 +12,7 @@ import random
 import logging
 import tempfile
 import sqlite3
+import re
 from typing import Dict, List, Optional
 from datetime import datetime
 
@@ -511,39 +512,81 @@ async def search_knowledge(request: Request):
             return text.lower().strip()
 
         def _split_query_tokens(q):
-            tokens = [q]
+            tokens = []
+            if 2 <= len(q) <= 24:
+                tokens.append(q)
             for sep in [' ', ',', '，', '、', '/', '|', '-', '_']:
                 for part in q.split(sep):
                     part = part.strip()
-                    if part and len(part) >= 2 and part not in tokens:
+                    if part and 2 <= len(part) <= 24 and part not in tokens:
                         tokens.append(part)
+            for term in _extract_domain_terms(q):
+                if term not in tokens:
+                    tokens.append(term)
+            return tokens
+
+        def _extract_domain_terms(q):
+            terms = []
+            domain_terms = [
+                "空地导弹", "空舰导弹", "空射巡航导弹", "制导系统", "控制系统", "动力系统",
+                "电气系统", "引战系统", "弹体结构", "电视", "红外", "双模导引头", "导引头",
+                "光轴", "光轴偏差", "光轴平行性", "融合偏差", "精确制导", "频综器", "频率综合器",
+                "惯性导航", "惯组", "雷达", "数据链", "校准", "更换", "失锁", "漂移", "偏差"
+            ]
+            for term in domain_terms:
+                if term in q and term not in terms:
+                    terms.append(term)
+            for term in re.findall(r"[A-Za-z]+-?\d+[A-Za-z0-9-]*", q):
+                if term not in terms:
+                    terms.append(term)
+            return terms
+
+        def _expand_recall_tokens(tokens):
+            recall_tokens = list(tokens)
             for part in list(tokens):
                 if len(part) >= 4:
                     for win_size in [2, 3]:
                         for k in range(len(part) - win_size + 1):
                             token = part[k:k+win_size]
-                            if token not in tokens:
-                                tokens.append(token)
-            return tokens
+                            if token not in recall_tokens:
+                                recall_tokens.append(token)
+            return recall_tokens
 
         def _compute_keyword_score(record, query_tokens, full_q):
-            text = " ".join([
-                str(record.get("content", "")),
-                str(record.get("description", "")),
-                str(record.get("problem", "")),
-                str(record.get("action", "")),
-                str(record.get("aircraft_model", ""))
-            ])
+            content = str(record.get("content", ""))
+            description = str(record.get("description", ""))
+            problem = str(record.get("problem", ""))
+            action = str(record.get("action", ""))
+            aircraft_model = str(record.get("aircraft_model", ""))
+            text = " ".join([content, description, problem, action, aircraft_model])
             text_norm = _normalize(text)
             total = len(query_tokens)
             if total == 0:
                 return 0.0, 0, 0
             matched = 0
+            matched_weight = 0.0
             for token in query_tokens:
                 tn = _normalize(token)
-                if tn and tn in text_norm:
+                if not tn:
+                    continue
+
+                field_weight = 0.0
+                if tn in _normalize(aircraft_model):
+                    field_weight = max(field_weight, 1.6)
+                if tn in _normalize(description):
+                    field_weight = max(field_weight, 1.35)
+                if tn in _normalize(problem):
+                    field_weight = max(field_weight, 1.35)
+                if tn in _normalize(action):
+                    field_weight = max(field_weight, 1.1)
+                if tn in _normalize(content):
+                    field_weight = max(field_weight, 1.2)
+
+                if field_weight > 0:
                     matched += 1
+                    matched_weight += field_weight
             ratio = matched / total
+            weighted_ratio = matched_weight / total
             if matched == total and total > 1:
                 boost = 1.5
             elif ratio >= 0.67:
@@ -553,7 +596,7 @@ async def search_knowledge(request: Request):
             fq_norm = _normalize(full_q)
             if fq_norm and fq_norm in text_norm:
                 boost = max(boost, 1.8)
-            return ratio * boost, matched, total
+            return weighted_ratio * boost, matched, total
 
         # 先用LLM提取关键词，再检索
         try:
@@ -566,21 +609,17 @@ async def search_knowledge(request: Request):
             kw_response = llm.invoke(kw_messages)
             extracted = [k.strip() for k in kw_response.split(",") if k.strip() and k.strip() != "无"]
             if extracted:
-                query_tokens = list(extracted)
-                # 为每个关键词生成2-3字滑动窗口
-                for kw in extracted:
-                    if len(kw) >= 4:
-                        for win_size in [2, 3]:
-                            for k in range(len(kw) - win_size + 1):
-                                token = kw[k:k+win_size]
-                                if token not in query_tokens:
-                                    query_tokens.append(token)
+                score_tokens = list(extracted)
+                for term in _split_query_tokens(query):
+                    if term not in score_tokens:
+                        score_tokens.append(term)
                 logger.info(f"📝 提取到关键词: {extracted}")
             else:
-                query_tokens = _split_query_tokens(query)
+                score_tokens = _split_query_tokens(query)
         except Exception as e:
             logger.warning(f"关键词提取失败，使用拆分: {e}")
-            query_tokens = _split_query_tokens(query)
+            score_tokens = _split_query_tokens(query)
+        query_tokens = _expand_recall_tokens(score_tokens)
 
         # ===== 关键词召回 =====
         collections = [c.name for c in client.get_collections().collections]
@@ -630,12 +669,9 @@ async def search_knowledge(request: Request):
             conn = sqlite3.connect(CASES_DB_PATH)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            raw_tokens = [query]
-            for sep in [' ', ',', '，', '、', '/', '|', '-', '_']:
-                for t in query.split(sep):
-                    t = t.strip()
-                    if t and len(t) >= 2 and t not in raw_tokens:
-                        raw_tokens.append(t)
+            raw_tokens = list(score_tokens)
+            if query not in raw_tokens:
+                raw_tokens.insert(0, query)
             sql_conditions = []
             sql_params = []
             for qp in raw_tokens:
@@ -676,7 +712,7 @@ async def search_knowledge(request: Request):
         # ===== 关键词计分 =====
         result_list = list(keyword_results.values())
         for r in result_list:
-            score, matched, total = _compute_keyword_score(r, query_tokens, query)
+            score, matched, total = _compute_keyword_score(r, score_tokens, query)
             r["score"] = score
             r["matched_tokens"] = matched
             r["total_tokens"] = total
