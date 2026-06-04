@@ -3403,7 +3403,7 @@ function renderRecentCases(cases) {
 function fillDiagnosisDemo() {
     const textarea = document.getElementById('fault-desc');
     if (textarea) {
-        textarea.value = '某型导弹在发射测试中制导系统信号丢失，无法锁定目标。初步检查发现惯性导航单元输出异常，陀螺仪漂移超标。';
+        textarea.value = '空地导弹-KD-88的制导系统电视/红外双模导引头光轴歪了，导致融合偏差，无法精确制导';
         textarea.dispatchEvent(new Event('input'));
         textarea.focus();
     }
@@ -3412,7 +3412,7 @@ function fillDiagnosisDemo() {
 function fillMaintenanceDemo() {
     const textarea = document.getElementById('maint-desc');
     if (textarea) {
-        textarea.value = '导弹发射车液压系统需要进行季度维护保养，包括更换液压油、检查密封件状态、测试系统压力。';
+        textarea.value = '空地导弹-YJ-91被动雷达导引头频综器如何更换';
         textarea.dispatchEvent(new Event('input'));
         textarea.focus();
     }
@@ -3430,7 +3430,7 @@ function fillQADemo() {
 function fillSearchDemo() {
     const input = document.getElementById('search-query');
     if (input) {
-        input.value = '制导系统故障';
+        input.value = '鹰击-18';
         input.focus();
     }
 }
