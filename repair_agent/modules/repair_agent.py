@@ -247,6 +247,7 @@ class RepairAgent:
         for kind, data in self.diagnosis_engine.diagnose_with_stream(description, image_path, mode="repair"):
             if kind == "diagnosis":
                 diagnosis_result = data
+                yield (kind, data)
             else:
                 yield (kind, data)
         
@@ -297,6 +298,7 @@ class RepairAgent:
         for kind, data in self.diagnosis_engine.diagnose_with_stream(description, image_path, mode="maintenance"):
             if kind == "diagnosis":
                 diagnosis_result = data
+                yield (kind, data)
             else:
                 yield (kind, data)
         

@@ -211,6 +211,8 @@ async function startDiagnosis() {
     state.isDiagnosing = true;
     state.analysisText = '';
     state.solutionText = '';
+    window._evidenceData = [];
+    window._diagnosisEvidenceData = [];
 
     // 更新 UI 状态
     elements.btnDiagnose.disabled = true;
@@ -248,27 +250,9 @@ async function startDiagnosis() {
             if (done) break;
 
             buffer += decoder.decode(value, { stream: true });
-
-            // 处理完整的 SSE 事件
-            const lines = buffer.split('\n');
-            buffer = lines.pop(); // 保留不完整的行
-
-            let eventType = '';
-            let eventData = '';
-
-            for (const line of lines) {
-                if (line.startsWith('event: ')) {
-                    eventType = line.substring(7).trim();
-                } else if (line.startsWith('data: ')) {
-                    eventData = line.substring(6).trim();
-                    if (eventType && eventData) {
-                        handleSSEEvent(eventType, eventData);
-                        eventType = '';
-                        eventData = '';
-                    }
-                }
-            }
+            buffer = processSSEBuffer(buffer, handleSSEEvent);
         }
+        if (buffer.trim()) processSSEBuffer(buffer + '\n\n', handleSSEEvent);
     } catch (error) {
         appendToCot(`<div class="cot-step" style="color: #dc2626;">❌ 错误: ${error.message}</div>`);
     } finally {
@@ -276,6 +260,30 @@ async function startDiagnosis() {
         elements.btnDiagnose.disabled = false;
         elements.btnDiagnose.textContent = '🚀 开始诊断';
     }
+}
+
+function processSSEBuffer(buffer, handler) {
+    const events = buffer.split(/\r?\n\r?\n/);
+    const remainder = events.pop() || '';
+
+    events.forEach(block => {
+        let eventType = '';
+        const dataLines = [];
+
+        block.split(/\r?\n/).forEach(line => {
+            if (line.startsWith('event:')) {
+                eventType = line.substring(6).trim();
+            } else if (line.startsWith('data:')) {
+                dataLines.push(line.substring(5).trimStart());
+            }
+        });
+
+        if (eventType && dataLines.length > 0) {
+            handler(eventType, dataLines.join('\n'));
+        }
+    });
+
+    return remainder;
 }
 
 function handleSSEEvent(eventType, dataStr) {
@@ -512,7 +520,7 @@ function handleDiagnosis(data) {
         });
         evidenceHtml += '</div>';
         elements.evidenceArea.innerHTML = evidenceHtml;
-    } else {
+    } else if (!elements.evidenceArea.querySelector('.evidence-item')) {
         elements.evidenceArea.innerHTML = '<em class="placeholder">未找到相关诊断依据</em>';
     }
 }
@@ -2329,6 +2337,7 @@ async function startMaintenance() {
     maintenanceState.isProcessing = true;
     maintenanceState.analysisText = '';
     maintenanceState.solutionText = '';
+    window._maintenanceEvidenceData = [];
 
     // 更新 UI 状态
     elements.btnMaintenance.disabled = true;
@@ -2367,27 +2376,9 @@ async function startMaintenance() {
             if (done) break;
 
             buffer += decoder.decode(value, { stream: true });
-
-            // 处理完整的 SSE 事件
-            const lines = buffer.split('\n');
-            buffer = lines.pop(); // 保留不完整的行
-
-            let eventType = '';
-            let eventData = '';
-
-            for (const line of lines) {
-                if (line.startsWith('event: ')) {
-                    eventType = line.substring(7).trim();
-                } else if (line.startsWith('data: ')) {
-                    eventData = line.substring(6).trim();
-                    if (eventType && eventData) {
-                        handleMaintenanceSSEEvent(eventType, eventData);
-                        eventType = '';
-                        eventData = '';
-                    }
-                }
-            }
+            buffer = processSSEBuffer(buffer, handleMaintenanceSSEEvent);
         }
+        if (buffer.trim()) processSSEBuffer(buffer + '\n\n', handleMaintenanceSSEEvent);
     } catch (error) {
         appendToMaintCot(`<div class="cot-step" style="color: #dc2626;">❌ 错误: ${error.message}</div>`);
     } finally {
@@ -2580,7 +2571,7 @@ function handleMaintenanceDiagnosis(data) {
         });
         evidenceHtml += '</div>';
         elements.maintEvidenceArea.innerHTML = evidenceHtml;
-    } else {
+    } else if (!elements.maintEvidenceArea.querySelector('.evidence-item')) {
         elements.maintEvidenceArea.innerHTML = '<em class="placeholder">未找到相关维护依据</em>';
     }
 }
