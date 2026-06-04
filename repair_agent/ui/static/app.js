@@ -3403,7 +3403,7 @@ function renderRecentCases(cases) {
 function fillDiagnosisDemo() {
     const textarea = document.getElementById('fault-desc');
     if (textarea) {
-        textarea.value = '空地导弹-KD-88的制导系统电视/红外双模导引头光轴歪了，导致融合偏差，无法精确制导';
+        textarea.value = '空舰导弹-鹰击-83-引战系统-YJ83-FZ-178-引信安全保险机构环境力不足致第二保险未解除';
         textarea.dispatchEvent(new Event('input'));
         textarea.focus();
     }
