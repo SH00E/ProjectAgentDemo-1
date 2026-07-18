@@ -60,7 +60,7 @@ def main():
 
     import_aviation = args.aviation
     sample_n = args.sample
-    total_steps = 4 if import_aviation else 3
+    total_steps = (4 if import_aviation else 3) + 1  # +1 for build_qa_relations
 
     print(" 一键导入数据")
     print("=" * 60)
@@ -70,6 +70,7 @@ def main():
     print(f"  {2 if import_aviation else 1}. 维修案例数据")
     print(f"  {3 if import_aviation else 2}. 维护案例数据")
     print(f"  {4 if import_aviation else 3}. QA 知识库数据")
+    print(f"  {5 if import_aviation else 4}. QA 跨章关联构建")
     if not import_aviation:
         print("\n  提示: 加 --aviation 可同时导入 FAA 航空数据")
     print("=" * 60)
@@ -124,6 +125,16 @@ def main():
     else:
         fail_count += 1
         print("  QA 知识库导入失败")
+
+    step += 1
+    print(f"\n{'=' * 60}")
+    print(f"[{step}/{total_steps}] 构建 QA 跨章关联")
+    print("=" * 60)
+    if run_script('build_qa_relations.py'):
+        success_count += 1
+    else:
+        fail_count += 1
+        print("  QA 跨章关联构建失败")
 
     print("\n" + "=" * 60)
     print(" 导入完成")
