@@ -228,12 +228,12 @@
         const typeColors = {
             Aircraft: '#3b82f6', Manufacturer: '#f59e0b', IncidentType: '#ef4444',
             Location: '#8b5cf6', QAPair: '#10b981', QAChapter: '#34d399',
-            AviationRecord: '#64748b'
+            AviationRecord: '#64748b', Hub: '#e2e8f0'
         };
         const typeNames = {
             Aircraft: '飞机型号', Manufacturer: '制造商', IncidentType: '事故类型',
             Location: '地点', QAPair: 'QA对', QAChapter: 'QA章节',
-            AviationRecord: '维修记录'
+            AviationRecord: '维修记录', Hub: '枢纽节点'
         };
 
         async function loadDashboard() {
@@ -305,21 +305,43 @@
             const nodes = data.nodes.map(n => ({...n}));
             const links = data.links.map(l => ({...l}));
 
+            // 添加中心枢纽节点，连接 QA 和 Aviation 两个子图
+            const hubId = "__hub__";
+            nodes.push({ id: hubId, type: "Hub", label: "装备知识图谱", group: "hub" });
+            const qaChapters = nodes.filter(n => n.type === "QAChapter");
+            const topAircraft = nodes.filter(n => n.type === "Aircraft").slice(0, 5);
+            const topMfgs = nodes.filter(n => n.type === "Manufacturer").slice(0, 3);
+            for (const ch of qaChapters) {
+                links.push({ source: hubId, target: ch.id, type: "HUB_QA", weight: 1 });
+            }
+            for (const a of topAircraft) {
+                links.push({ source: hubId, target: a.id, type: "HUB_AVIATION", weight: 1 });
+            }
+            for (const m of topMfgs) {
+                links.push({ source: hubId, target: m.id, type: "HUB_AVIATION", weight: 1 });
+            }
+
             const sim = d3.forceSimulation(nodes)
                 .force('link', d3.forceLink(links).id(d => d.id).distance(d => {
                     if (d.type === 'BELONGS_TO') return 30;
+                    if (d.type === 'HUB_QA' || d.type === 'HUB_AVIATION') return 120;
                     if (d.type === 'MANUFACTURED_BY') return 60;
                     return 80;
-                }).strength(d => d.type === 'BELONGS_TO' ? 0.8 : 0.2))
-                .force('charge', d3.forceManyBody().strength(-200))
+                }).strength(d => {
+                    if (d.type === 'BELONGS_TO') return 0.8;
+                    if (d.type === 'HUB_QA' || d.type === 'HUB_AVIATION') return 0.1;
+                    return 0.2;
+                }))
+                .force('charge', d3.forceManyBody().strength(-180))
                 .force('center', d3.forceCenter(W/2, H/2))
-                .force('collision', d3.forceCollide(20));
+                .force('collision', d3.forceCollide(18));
 
             const link = g.append('g').selectAll('line')
                 .data(links).join('line')
                 .attr('stroke', '#334155')
-                .attr('stroke-width', d => d.type === 'BELONGS_TO' ? 1 : d.weight ? Math.min(Math.sqrt(d.weight)*0.5, 4) : 1.5)
-                .attr('stroke-opacity', 0.6);
+                .attr('stroke-width', d => d.type === 'HUB_QA' || d.type === 'HUB_AVIATION' ? 0.8 : d.type === 'BELONGS_TO' ? 1 : d.weight ? Math.min(Math.sqrt(d.weight)*0.5, 4) : 1.5)
+                .attr('stroke-dasharray', d => d.type === 'HUB_QA' || d.type === 'HUB_AVIATION' ? '4,4' : null)
+                .attr('stroke-opacity', d => d.type === 'HUB_QA' || d.type === 'HUB_AVIATION' ? 0.3 : 0.6);
 
             const node = g.append('g').selectAll('g')
                 .data(nodes).join('g')
@@ -331,17 +353,19 @@
                 );
 
             node.append('circle')
-                .attr('r', d => d.type === 'QAChapter' ? 12 : d.type === 'QAPair' ? 5 : d.type === 'Aircraft' ? 10 : 7)
-                .attr('fill', d => typeColors[d.type] || '#94a3b8')
-                .attr('stroke', '#1e293b')
-                .attr('stroke-width', 2);
+                .attr('r', d => d.type === 'Hub' ? 14 : d.type === 'QAChapter' ? 12 : d.type === 'QAPair' ? 5 : d.type === 'Aircraft' ? 10 : 7)
+                .attr('fill', d => d.type === 'Hub' ? '#e2e8f0' : typeColors[d.type] || '#94a3b8')
+                .attr('stroke', d => d.type === 'Hub' ? '#94a3b8' : '#1e293b')
+                .attr('stroke-width', d => d.type === 'Hub' ? 3 : 2)
+                .attr('stroke-dasharray', d => d.type === 'Hub' ? '3,2' : null);
 
             node.append('text')
-                .text(d => d.label.length > 18 ? d.label.slice(0, 18) + '...' : d.label)
-                .attr('x', d => d.type === 'QAChapter' ? 16 : 10)
-                .attr('y', 4)
-                .attr('font-size', d => d.type === 'QAChapter' ? 10 : 8)
-                .attr('fill', '#cbd5e1')
+                .text(d => d.type === 'Hub' ? d.label : d.label.length > 18 ? d.label.slice(0, 18) + '...' : d.label)
+                .attr('x', d => d.type === 'Hub' ? 18 : d.type === 'QAChapter' ? 16 : 10)
+                .attr('y', d => d.type === 'Hub' ? 5 : 4)
+                .attr('font-size', d => d.type === 'Hub' ? 12 : d.type === 'QAChapter' ? 10 : 8)
+                .attr('fill', d => d.type === 'Hub' ? '#94a3b8' : '#cbd5e1')
+                .attr('font-weight', d => d.type === 'Hub' ? 'bold' : 'normal')
                 .attr('pointer-events', 'none');
 
             node.on('mouseenter', (event, d) => {
