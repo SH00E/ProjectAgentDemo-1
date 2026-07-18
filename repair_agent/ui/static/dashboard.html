@@ -5,40 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>保障智能助手 - 数据大屏</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
             color: white;
             min-height: 100vh;
-            overflow: hidden;
         }
-
         .dashboard {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
-            grid-template-rows: auto 1fr 1fr;
+            grid-template-rows: auto auto auto 1fr;
             gap: 20px;
             padding: 20px;
             height: 100vh;
         }
-
         .header {
             grid-column: 1 / -1;
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 10px 20px;
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(255,255,255,0.05);
             border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255,255,255,0.1);
         }
-
         .header h1 {
             font-size: 28px;
             font-weight: 700;
@@ -46,21 +37,15 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
-
-        .header-time {
-            font-size: 16px;
-            color: #94a3b8;
-        }
-
+        .header-time { font-size: 16px; color: #94a3b8; }
         .card {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(255,255,255,0.05);
             border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255,255,255,0.1);
             padding: 20px;
             display: flex;
             flex-direction: column;
         }
-
         .card-title {
             font-size: 16px;
             font-weight: 600;
@@ -69,8 +54,8 @@
             display: flex;
             align-items: center;
             gap: 8px;
+            flex-shrink: 0;
         }
-
         .card-title::before {
             content: '';
             width: 4px;
@@ -78,27 +63,20 @@
             background: linear-gradient(180deg, #3b82f6, #10b981);
             border-radius: 2px;
         }
-
         .stat-cards {
             grid-column: 1 / -1;
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(5, 1fr);
             gap: 20px;
         }
-
         .stat-card {
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(16, 185, 129, 0.2));
+            background: linear-gradient(135deg, rgba(59,130,246,0.2), rgba(16,185,129,0.2));
             border-radius: 12px;
             padding: 24px;
             text-align: center;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255,255,255,0.1);
         }
-
-        .stat-card .icon {
-            font-size: 36px;
-            margin-bottom: 12px;
-        }
-
+        .stat-card .icon { font-size: 36px; margin-bottom: 12px; }
         .stat-card .number {
             font-size: 42px;
             font-weight: 700;
@@ -106,120 +84,94 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
-
-        .stat-card .label {
-            font-size: 14px;
-            color: #94a3b8;
-            margin-top: 8px;
-        }
-
-        .chart-container {
-            flex: 1;
-            min-height: 0;
-            overflow-y: auto;
-        }
-
-        .bar-chart {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .bar-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
+        .stat-card .label { font-size: 14px; color: #94a3b8; margin-top: 8px; }
+        .chart-container { flex: 1; min-height: 0; overflow-y: auto; }
+        .bar-chart { display: flex; flex-direction: column; gap: 10px; }
+        .bar-item { display: flex; align-items: center; gap: 10px; }
         .bar-label {
-            width: 100px;
+            width: 90px;
             text-align: right;
-            font-size: 13px;
+            font-size: 12px;
             color: #e2e8f0;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
-
         .bar-wrapper {
             flex: 1;
-            height: 28px;
-            background: rgba(255, 255, 255, 0.1);
+            height: 24px;
+            background: rgba(255,255,255,0.1);
             border-radius: 6px;
             overflow: hidden;
         }
-
         .bar-fill {
             height: 100%;
             background: linear-gradient(90deg, #3b82f6, #60a5fa);
             border-radius: 6px;
-            transition: width 1s ease;
+            transition: width 1s;
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            padding-right: 10px;
-            font-size: 12px;
+            padding-right: 8px;
+            font-size: 11px;
             font-weight: 600;
         }
+        .bar-fill.green { background: linear-gradient(90deg, #10b981, #34d399); }
+        .bar-fill.yellow { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
 
-        .bar-fill.green {
-            background: linear-gradient(90deg, #10b981, #34d399);
+        .graph-card {
+            grid-column: 1 / -1;
+            min-height: 500px;
         }
-
-        .bar-fill.yellow {
-            background: linear-gradient(90deg, #f59e0b, #fbbf24);
-        }
-
-        .recent-list {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .recent-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-        }
-
-        .recent-type {
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 500;
-        }
-
-        .recent-type.repair {
-            background: rgba(59, 130, 246, 0.3);
-            color: #93c5fd;
-        }
-
-        .recent-type.maintenance {
-            background: rgba(16, 185, 129, 0.3);
-            color: #6ee7b7;
-        }
-
-        .recent-title {
+        .graph-card .card-body {
             flex: 1;
-            font-size: 14px;
+            position: relative;
+            min-height: 0;
+        }
+        #graph-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0; left: 0;
+        }
+        #graph-container svg { width: 100%; height: 100%; }
+        #graph-tooltip {
+            position: absolute;
+            padding: 10px 14px;
+            background: rgba(15,23,42,0.95);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
             color: #e2e8f0;
+            font-size: 13px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            max-width: 320px;
+            z-index: 100;
         }
-
-        .recent-time {
-            font-size: 12px;
-            color: #64748b;
+        .graph-legend {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 12px;
+            background: rgba(15,23,42,0.8);
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.1);
+            z-index: 10;
         }
+        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #cbd5e1; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
 
         .back-btn {
             position: fixed;
             top: 20px;
             right: 20px;
             padding: 10px 20px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
             border-radius: 8px;
             color: white;
             cursor: pointer;
@@ -227,158 +179,210 @@
             transition: all 0.2s;
             z-index: 100;
         }
-
-        .back-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-        }
-
-        .loading {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            color: #64748b;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        .pulse {
-            animation: pulse 2s infinite;
-        }
+        .back-btn:hover { background: rgba(255,255,255,0.2); }
+        .loading { display: flex; align-items: center; justify-content: center; height: 100%; color: #64748b; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .pulse { animation: pulse 2s infinite; }
     </style>
 </head>
 <body>
     <button class="back-btn" onclick="window.location.href='/'">← 返回主界面</button>
-
     <div class="dashboard">
         <div class="header">
-            <h1>🛡️ 装备保障智能助手 - 数据大屏</h1>
+            <h1>装备保障智能助手 - 数据大屏</h1>
             <div class="header-time" id="current-time"></div>
         </div>
 
         <div class="stat-cards">
-            <div class="stat-card">
-                <div class="icon">📊</div>
-                <div class="number" id="total-cases">--</div>
-                <div class="label">案例总数</div>
-            </div>
-            <div class="stat-card">
-                <div class="icon">🔧</div>
-                <div class="number" id="repair-cases">--</div>
-                <div class="label">维修案例</div>
-            </div>
-            <div class="stat-card">
-                <div class="icon">🛠️</div>
-                <div class="number" id="maintenance-cases">--</div>
-                <div class="label">维护案例</div>
-            </div>
-            <div class="stat-card">
-                <div class="icon">📮</div>
-                <div class="number" id="feedback-count">--</div>
-                <div class="label">用户反馈</div>
-            </div>
+            <div class="stat-card"><div class="icon"></div><div class="number" id="total-cases">--</div><div class="label">案例总数</div></div>
+            <div class="stat-card"><div class="icon"></div><div class="number" id="repair-cases">--</div><div class="label">维修案例</div></div>
+            <div class="stat-card"><div class="icon"></div><div class="number" id="maintenance-cases">--</div><div class="label">维护案例</div></div>
+            <div class="stat-card"><div class="icon"></div><div class="number" id="qa-count">--</div><div class="label">QA知识对</div></div>
+            <div class="stat-card"><div class="icon"></div><div class="number" id="feedback-count">--</div><div class="label">用户反馈</div></div>
         </div>
 
-        <div class="card">
-            <div class="card-title">🛩️ 设备类型分布</div>
-            <div class="chart-container" id="device-chart">
-                <div class="loading">加载中...</div>
-            </div>
-        </div>
+        <div class="card"><div class="card-title">设备类型分布</div><div class="chart-container" id="device-chart"><div class="loading">加载中...</div></div></div>
+        <div class="card"><div class="card-title">故障类型分布</div><div class="chart-container" id="fault-chart"><div class="loading">加载中...</div></div></div>
+        <div class="card"><div class="card-title">维护类型分布</div><div class="chart-container" id="maintenance-chart"><div class="loading">加载中...</div></div></div>
 
-        <div class="card">
-            <div class="card-title">⚠️ 故障类型分布</div>
-            <div class="chart-container" id="fault-chart">
-                <div class="loading">加载中...</div>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-title">🔧 维护类型分布</div>
-            <div class="chart-container" id="maintenance-chart">
-                <div class="loading">加载中...</div>
+        <div class="card graph-card">
+            <div class="card-title">知识图谱（拖拽 / 滚轮缩放 / 悬停查看详情）</div>
+            <div class="card-body">
+                <div class="graph-legend" id="graph-legend"></div>
+                <div id="graph-tooltip"></div>
+                <div id="graph-container"><div class="loading pulse">加载知识图谱...</div></div>
             </div>
         </div>
     </div>
 
+    <script src="/static/d3.min.js"></script>
     <script>
-        // 更新时间
         function updateTime() {
             const now = new Date();
-            const timeStr = now.toLocaleString('zh-CN', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
+            document.getElementById('current-time').textContent = now.toLocaleString('zh-CN', {
+                year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'
             });
-            document.getElementById('current-time').textContent = timeStr;
         }
-        updateTime();
-        setInterval(updateTime, 1000);
+        updateTime(); setInterval(updateTime, 1000);
 
-        // 加载数据
-        async function loadData() {
+        const typeColors = {
+            Aircraft: '#3b82f6', Manufacturer: '#f59e0b', IncidentType: '#ef4444',
+            Location: '#8b5cf6', QAPair: '#10b981', QAChapter: '#34d399',
+            AviationRecord: '#64748b'
+        };
+        const typeNames = {
+            Aircraft: '飞机型号', Manufacturer: '制造商', IncidentType: '事故类型',
+            Location: '地点', QAPair: 'QA对', QAChapter: 'QA章节',
+            AviationRecord: '维修记录'
+        };
+
+        async function loadDashboard() {
             try {
-                const response = await fetch('/api/data-stats');
-                const data = await response.json();
-
+                const resp = await fetch('/api/data-stats');
+                const data = await resp.json();
                 if (data.success) {
-                    const stats = data.data;
-
-                    // 更新数字
-                    document.getElementById('total-cases').textContent = stats.summary.total_cases;
-                    document.getElementById('repair-cases').textContent = stats.summary.repair_cases;
-                    document.getElementById('maintenance-cases').textContent = stats.summary.maintenance_cases;
-                    document.getElementById('feedback-count').textContent = stats.summary.feedback_count;
-
-                    // 渲染图表
-                    renderBarChart('device-chart', stats.device_distribution, 'blue');
-                    renderBarChart('fault-chart', stats.fault_distribution, 'yellow');
-                    renderBarChart('maintenance-chart', stats.maintenance_distribution, 'green');
+                    const s = data.data;
+                    document.getElementById('total-cases').textContent = s.summary.total_cases;
+                    document.getElementById('repair-cases').textContent = s.summary.repair_cases;
+                    document.getElementById('maintenance-cases').textContent = s.summary.maintenance_cases;
+                    document.getElementById('qa-count').textContent = s.summary.qa_pairs || '--';
+                    document.getElementById('feedback-count').textContent = s.summary.feedback_count;
+                    renderBar('device-chart', s.device_distribution, 'blue');
+                    renderBar('fault-chart', s.fault_distribution, 'yellow');
+                    renderBar('maintenance-chart', s.maintenance_distribution, 'green');
                 }
-            } catch (e) {
-                console.error('加载数据失败:', e);
-            }
+            } catch(e) { console.error(e); }
+
+            try {
+                const resp = await fetch('/api/stats/knowledge-graph');
+                const kg = await resp.json();
+                if (kg.success) renderGraph(kg.data);
+            } catch(e) { console.error(e); }
         }
 
-        function renderBarChart(containerId, data, colorType) {
-            const container = document.getElementById(containerId);
-            if (!container || !data || data.length === 0) {
-                container.innerHTML = '<div class="loading">暂无数据</div>';
-                return;
-            }
-
-            const maxCount = Math.max(...data.map(d => d.count));
+        function renderBar(id, data, color) {
+            const el = document.getElementById(id);
+            if (!el || !data || !data.length) { el.innerHTML = '<div class="loading">暂无数据</div>'; return; }
+            const max = Math.max(...data.map(d=>d.count));
             let html = '<div class="bar-chart">';
+            data.forEach(d => {
+                const w = max>0 ? (d.count/max*100) : 0;
+                const cls = color==='green'?'green':color==='yellow'?'yellow':'';
+                html += `<div class="bar-item"><span class="bar-label" title="${d.name}">${d.name}</span><div class="bar-wrapper"><div class="bar-fill ${cls}" style="width:${w}%">${d.count}</div></div></div>`;
+            });
+            html += '</div>';
+            el.innerHTML = html;
+        }
 
-            data.forEach(item => {
-                const width = maxCount > 0 ? (item.count / maxCount * 100) : 0;
-                const fillClass = colorType === 'green' ? 'green' : colorType === 'yellow' ? 'yellow' : '';
-                
-                html += `
-                    <div class="bar-item">
-                        <span class="bar-label" title="${item.name}">${item.name}</span>
-                        <div class="bar-wrapper">
-                            <div class="bar-fill ${fillClass}" style="width: ${width}%">${item.count}</div>
-                        </div>
-                    </div>
-                `;
+        function renderGraph(data) {
+            const container = document.getElementById('graph-container');
+            const tooltip = document.getElementById('graph-tooltip');
+            const legendEl = document.getElementById('graph-legend');
+
+            const byType = data.stats.by_type || {};
+            let legHtml = '';
+            for (const [t, label] of Object.entries(typeNames)) {
+                if (byType[t]) {
+                    legHtml += `<div class="legend-item"><div class="legend-dot" style="background:${typeColors[t]||'#94a3b8'}"></div>${label} (${byType[t]})</div>`;
+                }
+            }
+            legendEl.innerHTML = legHtml;
+
+            container.innerHTML = '';
+            const rect = container.getBoundingClientRect();
+            const W = rect.width, H = Math.max(rect.height, 500);
+
+            const svg = d3.select('#graph-container').append('svg')
+                .attr('viewBox', [0, 0, W, H]);
+
+            const g = svg.append('g');
+
+            const zoom = d3.zoom().scaleExtent([0.2, 5]).on('zoom', (event) => {
+                g.attr('transform', event.transform);
+            });
+            svg.call(zoom);
+
+            const nodes = data.nodes.map(n => ({...n}));
+            const links = data.links.map(l => ({...l}));
+
+            const sim = d3.forceSimulation(nodes)
+                .force('link', d3.forceLink(links).id(d => d.id).distance(d => {
+                    if (d.type === 'BELONGS_TO') return 30;
+                    if (d.type === 'MANUFACTURED_BY') return 60;
+                    return 80;
+                }).strength(d => d.type === 'BELONGS_TO' ? 0.8 : 0.2))
+                .force('charge', d3.forceManyBody().strength(-200))
+                .force('center', d3.forceCenter(W/2, H/2))
+                .force('collision', d3.forceCollide(20));
+
+            const link = g.append('g').selectAll('line')
+                .data(links).join('line')
+                .attr('stroke', '#334155')
+                .attr('stroke-width', d => d.type === 'BELONGS_TO' ? 1 : d.weight ? Math.min(Math.sqrt(d.weight)*0.5, 4) : 1.5)
+                .attr('stroke-opacity', 0.6);
+
+            const node = g.append('g').selectAll('g')
+                .data(nodes).join('g')
+                .attr('cursor', 'pointer')
+                .call(d3.drag()
+                    .on('start', (event, d) => { if (!event.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+                    .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
+                    .on('end', (event, d) => { if (!event.active) sim.alphaTarget(0); d.fx = null; d.fy = null; })
+                );
+
+            node.append('circle')
+                .attr('r', d => d.type === 'QAChapter' ? 12 : d.type === 'QAPair' ? 5 : d.type === 'Aircraft' ? 10 : 7)
+                .attr('fill', d => typeColors[d.type] || '#94a3b8')
+                .attr('stroke', '#1e293b')
+                .attr('stroke-width', 2);
+
+            node.append('text')
+                .text(d => d.label.length > 18 ? d.label.slice(0, 18) + '...' : d.label)
+                .attr('x', d => d.type === 'QAChapter' ? 16 : 10)
+                .attr('y', 4)
+                .attr('font-size', d => d.type === 'QAChapter' ? 10 : 8)
+                .attr('fill', '#cbd5e1')
+                .attr('pointer-events', 'none');
+
+            node.on('mouseenter', (event, d) => {
+                let html = `<b style="color:${typeColors[d.type]}">${typeNames[d.type] || d.type}</b><br/>`;
+                html += `<span>${d.label}</span>`;
+                if (d.type === 'QAPair') {
+                    html += `<br/><span style="color:#94a3b8;font-size:11px">点击查看完整QA</span>`;
+                }
+                tooltip.innerHTML = html;
+                tooltip.style.opacity = 1;
+                tooltip.style.left = (event.offsetX + 15) + 'px';
+                tooltip.style.top = (event.offsetY - 15) + 'px';
+            }).on('mousemove', (event) => {
+                tooltip.style.left = (event.offsetX + 15) + 'px';
+                tooltip.style.top = (event.offsetY - 15) + 'px';
+            }).on('mouseleave', () => {
+                tooltip.style.opacity = 0;
+            }).on('click', (event, d) => {
+                event.stopPropagation();
+                if (d.type === 'QAChapter') {
+                    const qaNodes = nodes.filter(n => n.type === 'QAPair' &&
+                        links.some(l => l.source === n.id && l.target === d.id));
+                    qaNodes.forEach(n => { n.fx = null; n.fy = null; });
+                    sim.alpha(0.5).restart();
+                }
             });
 
-            html += '</div>';
-            container.innerHTML = html;
+            svg.on('click', () => {
+                nodes.forEach(n => { n.fx = null; n.fy = null; });
+                sim.alpha(0.3).restart();
+            });
+
+            sim.on('tick', () => {
+                link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+                node.attr('transform', d => `translate(${d.x},${d.y})`);
+            });
         }
 
-        // 初始加载
-        loadData();
-
-        // 每30秒刷新一次
-        setInterval(loadData, 30000);
+        loadDashboard();
+        setInterval(loadDashboard, 60000);
     </script>
 </body>
 </html>

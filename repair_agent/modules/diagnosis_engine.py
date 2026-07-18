@@ -7,13 +7,19 @@
 
 import os
 import json
-import random
 import logging
 import re
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
 from prompts import fmt_prompt, random_reduce_count
+from .retrieval_utils import (
+    normalize, clean_score_tokens, split_query_tokens, extract_domain_terms,
+    expand_recall_tokens, compute_keyword_score, get_relevance_label,
+    search_qdrant_keywords, search_sqlite_keywords,
+    vector_fallback_search, hyde_mqe_search, merge_and_sort_results,
+    DOMAIN_TERMS
+)
 
 logger = logging.getLogger(__name__)
 
@@ -92,215 +98,14 @@ class RepairDiagnosisEngine:
                 "error": str(e),
                 "description": description
             }
-    
-    def _translate_to_english(self, text: str) -> str:
-        """将中文查询翻译为英文，用于向量库搜索"""
-        try:
-            user_prompt = fmt_prompt("translate", "user", text=text)
-            messages = [
-                {"role": "system", "content": fmt_prompt("translate", "system")},
-                {"role": "user", "content": user_prompt}
-            ]
-            result = self.llm.invoke(messages)
-            return result.strip()
-        except Exception as e:
-            logger.warning(f"⚠️ 翻译失败: {e}")
-            return text
-
-    @staticmethod
-    def _normalize(text: str) -> str:
-        """去除常见分隔符，用于精确匹配比较"""
-        for sep in ['-', '_', ' ', '　', '/', '\\', '·', '•']:
-            text = text.replace(sep, '')
-        for particle in ['的', '了']:
-            text = text.replace(particle, '')
-        return text.lower().strip()
-
-    @staticmethod
-    def _clean_score_tokens(tokens: List[str]) -> List[str]:
-        """清理不应参与相关性分母的提示词标签和泛词。"""
-        ignored_tokens = {
-            "装备型号", "装备名称", "型号", "名称", "系统名称", "部件名称", "相关部件",
-            "故障现象", "故障类型", "维护类型", "维护内容", "关键词", "无"
-        }
-        cleaned = []
-        for token in tokens:
-            token = str(token).strip()
-            if not token or token in ignored_tokens:
-                continue
-            if len(token) > 24:
-                continue
-            token_norm = RepairDiagnosisEngine._normalize(token)
-            if not token_norm or token_norm in {RepairDiagnosisEngine._normalize(t) for t in ignored_tokens}:
-                continue
-            if token not in cleaned:
-                cleaned.append(token)
-        return cleaned
-
-    @staticmethod
-    def split_query_tokens(query: str) -> List[str]:
-        """拆分为核心 tokens: 原始查询 + 分隔符拆分，不包含滑动窗口。"""
-        tokens = []
-        if 2 <= len(query) <= 24:
-            tokens.append(query)
-        # 按分隔符拆分
-        for sep in [' ', ',', '，', '、', '/', '|', '-', '_']:
-            for part in query.split(sep):
-                part = part.strip()
-                if part and 2 <= len(part) <= 24 and part not in tokens:
-                    tokens.append(part)
-        for term in RepairDiagnosisEngine._extract_domain_terms(query):
-            if term not in tokens:
-                tokens.append(term)
-        return tokens
-
-    @staticmethod
-    def _extract_domain_terms(query: str) -> List[str]:
-        """提取常见装备维修短语，避免长句查询被滑窗 token 稀释。"""
-        terms = []
-        domain_terms = [
-            "空地导弹", "空舰导弹", "空射巡航导弹", "制导系统", "控制系统", "动力系统",
-            "电气系统", "引战系统", "弹体结构", "电视", "红外", "双模导引头", "导引头",
-            "光轴", "光轴偏差", "光轴平行性", "融合偏差", "精确制导", "频综器", "频率综合器",
-            "惯性导航", "惯组", "雷达", "数据链", "校准", "更换", "失锁", "漂移", "偏差"
-        ]
-        for term in domain_terms:
-            if term in query and term not in terms:
-                terms.append(term)
-        for term in re.findall(r"[A-Za-z]+-?\d+[A-Za-z0-9-]*", query):
-            if term not in terms:
-                terms.append(term)
-        return terms
-
-    @staticmethod
-    def expand_recall_tokens(tokens: List[str]) -> List[str]:
-        """扩展召回 tokens；滑动窗口只用于召回，不参与相关性分母。"""
-        recall_tokens = list(tokens)
-        # 滑动窗口（仅对长度>=4的片段，避免太短的无意义token）
-        for part in list(tokens):
-            if len(part) >= 4:
-                for win_size in [2, 3]:
-                    for k in range(len(part) - win_size + 1):
-                        token = part[k:k+win_size]
-                        if token not in recall_tokens:
-                            recall_tokens.append(token)
-        return recall_tokens
-
-    @staticmethod
-    def compute_keyword_score(record: Dict, query_tokens: List[str], full_query: str) -> tuple:
-        """
-        统计 query_tokens 中有多少命中了 record 的文本字段
-        
-        返回: (score, matched_count, total_count)
-        """
-        content = str(record.get("content", ""))
-        description = str(record.get("description", ""))
-        problem = str(record.get("problem", ""))
-        action = str(record.get("action", ""))
-        aircraft_model = str(record.get("aircraft_model", ""))
-        text = " ".join([content, description, problem, action, aircraft_model])
-        text_norm = RepairDiagnosisEngine._normalize(text)
-
-        total = len(query_tokens)
-        if total == 0:
-            return 0.0, 0, 0
-
-        matched = 0
-        matched_weight = 0.0
-        for token in query_tokens:
-            token_norm = RepairDiagnosisEngine._normalize(token)
-            if not token_norm:
-                continue
-
-            field_weight = 0.0
-            if token_norm in RepairDiagnosisEngine._normalize(aircraft_model):
-                field_weight = max(field_weight, 1.6)
-            if token_norm in RepairDiagnosisEngine._normalize(description):
-                field_weight = max(field_weight, 1.35)
-            if token_norm in RepairDiagnosisEngine._normalize(problem):
-                field_weight = max(field_weight, 1.35)
-            if token_norm in RepairDiagnosisEngine._normalize(action):
-                field_weight = max(field_weight, 1.1)
-            if token_norm in RepairDiagnosisEngine._normalize(content):
-                field_weight = max(field_weight, 1.2)
-
-            if field_weight > 0:
-                matched += 1
-                matched_weight += field_weight
-
-        ratio = matched / total
-        weighted_ratio = matched_weight / total
-
-        # boost: 全部命中 > 大部分命中 > 部分命中
-        if matched == total and total > 1:
-            boost = 1.5  # 全部命中
-        elif ratio >= 0.67:
-            boost = 1.2  # 大部分命中
-        else:
-            boost = 1.0
-
-        # 额外检查：完整查询作为连续子串出现
-        full_query_norm = RepairDiagnosisEngine._normalize(full_query)
-        if full_query_norm and full_query_norm in text_norm:
-            boost = max(boost, 1.8)
-
-        score = weighted_ratio * boost
-        return score, matched, total
-
-    def _search_collection(self, client, collection_name: str, query_parts: List[str],
-                           keyword_results: Dict):
-        """在单个 Qdrant 集合中做关键词召回（不评分）"""
-        from qdrant_client.models import Filter, FieldCondition, MatchText
-
-        kw_found = 0
-        try:
-            keyword_conditions = []
-            for qp in query_parts:
-                keyword_conditions.extend([
-                    FieldCondition(key="content", match=MatchText(text=qp)),
-                    FieldCondition(key="text", match=MatchText(text=qp)),
-                    FieldCondition(key="description", match=MatchText(text=qp)),
-                    FieldCondition(key="description_zh", match=MatchText(text=qp)),
-                    FieldCondition(key="problem", match=MatchText(text=qp)),
-                    FieldCondition(key="problem_zh", match=MatchText(text=qp)),
-                    FieldCondition(key="action", match=MatchText(text=qp)),
-                    FieldCondition(key="action_zh", match=MatchText(text=qp)),
-                ])
-            kw_filter = Filter(should=keyword_conditions)
-            kw_scroll = client.scroll(
-                collection_name=collection_name,
-                scroll_filter=kw_filter,
-                limit=1000,
-                with_payload=True
-            )
-            for point in kw_scroll[0]:
-                payload = point.payload or {}
-                rid = payload.get("record_id", str(point.id))
-                if rid not in keyword_results:
-                    keyword_results[rid] = {
-                        "content": payload.get("content", payload.get("text", "")),
-                        "source": payload.get("source", "unknown"),
-                        "record_id": rid,
-                        "aircraft_model": payload.get("aircraft_model", ""),
-                        "manufacturer": payload.get("manufacturer", ""),
-                        "description": payload.get("description", "") or payload.get("description_zh", ""),
-                        "problem": payload.get("problem", "") or payload.get("problem_zh", ""),
-                        "action": payload.get("action", "") or payload.get("action_zh", ""),
-                        "case_type": payload.get("case_type", ""),
-                        "collection": collection_name,
-                    }
-                    kw_found += 1
-            logger.info(f"关键词召回({collection_name}): {kw_found} 条")
-        except Exception as e:
-            logger.warning(f"关键词召回失败({collection_name}): {e}")
 
     def _retrieve_knowledge(self, query: str, mode: str = "repair", keywords: List[str] = None) -> List[Dict]:
-        """检索相关知识 - 关键词计分排序，向量作为 fallback
-        
+        """检索相关知识 - 关键词计分 + HyDE/MQE向量扩展 混合检索
+
         Args:
-            query: 原始查询（用于向量fallback和完整子串匹配）
+            query: 原始查询
             mode: "repair" 或 "maintenance"
-            keywords: 预提取的关键词列表，如果为None则从query拆分
+            keywords: 预提取的关键词列表
         """
         try:
             from qdrant_client import QdrantClient
@@ -311,149 +116,51 @@ class RepairDiagnosisEngine:
             client = QdrantClient(url=qdrant_url, trust_env=not is_local)
             embedder = get_text_embedder()
 
-            # 确定要排除的案例类型
             exclude_case_type = "maintenance" if mode == "repair" else "repair"
+            collections = [c.name for c in client.get_collections().collections]
 
-            # 使用预提取的关键词计分；滑动窗口只用于召回，避免长句相关性被稀释
             if keywords:
-                score_tokens = self._clean_score_tokens(keywords)
-                for term in self.split_query_tokens(query):
+                score_tokens = clean_score_tokens(keywords)
+                for term in split_query_tokens(query):
                     if term not in score_tokens:
                         score_tokens.append(term)
             else:
-                score_tokens = self.split_query_tokens(query)
-            score_tokens = self._clean_score_tokens(score_tokens)
-            query_tokens = self.expand_recall_tokens(score_tokens)
-            logger.info(f"🔍 计分 tokens ({len(score_tokens)}): {score_tokens[:10]}...")
-            logger.info(f"🔍 召回 tokens ({len(query_tokens)}): {query_tokens[:10]}...")
+                score_tokens = split_query_tokens(query)
+            score_tokens = clean_score_tokens(score_tokens)
+            query_tokens = expand_recall_tokens(score_tokens)
+            logger.info(f"\U0001f50d 计分 tokens ({len(score_tokens)}): {score_tokens[:10]}...")
+            logger.info(f"\U0001f50d 召回 tokens ({len(query_tokens)}): {query_tokens[:10]}...")
 
-            # ===== 第一步：关键词召回 =====
-            collections = [c.name for c in client.get_collections().collections]
             keyword_results = {}
             for col_name in collections:
-                try:
-                    self._search_collection(client, col_name, query_tokens, keyword_results)
-                except Exception as e:
-                    logger.warning(f"召回失败({col_name}): {e}")
+                search_qdrant_keywords(client, col_name, query_tokens, keyword_results, exclude_case_type)
 
-            # 过滤掉不匹配模式的案例类型
-            filtered_out = 0
-            for rid in list(keyword_results.keys()):
-                ct = keyword_results[rid].get("case_type", "")
-                if ct == exclude_case_type:
-                    del keyword_results[rid]
-                    filtered_out += 1
-            if filtered_out > 0:
-                logger.info(f"🗂️ 过滤掉 {filtered_out} 条 '{exclude_case_type}' 类型案例")
+            cases_db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                                         "memory_data", "cases.db")
+            search_sqlite_keywords(cases_db_path, score_tokens, query, keyword_results, exclude_case_type)
 
-            # ===== 第二步：SQLite 关键词召回 =====
-            try:
-                import sqlite3
-                cases_db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                                             "memory_data", "cases.db")
-                if os.path.exists(cases_db_path):
-                    raw_tokens = list(score_tokens)
-                    if query not in raw_tokens:
-                        raw_tokens.insert(0, query)
-
-                    conn = sqlite3.connect(cases_db_path)
-                    conn.row_factory = sqlite3.Row
-                    cursor = conn.cursor()
-                    sql_conditions = []
-                    sql_params = []
-                    for qp in raw_tokens:
-                        like_param = f"%{qp}%"
-                        sql_conditions.append('''(title LIKE ? OR device_type LIKE ? OR fault_symptom LIKE ?
-                                  OR fault_cause LIKE ? OR solution LIKE ? OR parts_used LIKE ?
-                                  OR notes LIKE ? OR maintenance_type LIKE ? OR maintenance_cycle LIKE ?
-                                  OR maintenance_standard LIKE ?)''')
-                        sql_params.extend([like_param] * 10)
-                    if sql_conditions:
-                        sql = 'SELECT DISTINCT * FROM cases WHERE (' + ' OR '.join(sql_conditions) + ') AND case_type != ?'
-                        sql_params.append(exclude_case_type)
-                        cursor.execute(sql, sql_params)
-                    rows = cursor.fetchall()
-                    conn.close()
-                    for row in rows:
-                        case_id = row["id"]
-                        rid = f"CASE_{case_id}"
-                        if rid in keyword_results:
-                            continue
-                        case_type = row["case_type"] if "case_type" in row.keys() else "repair"
-                        if case_type == "maintenance":
-                            content = f"{row['title']} | 设备: {row['device_type']} | 维护类型: {row['maintenance_type'] if 'maintenance_type' in row.keys() else ''} | 方案: {row['solution']}"
-                        else:
-                            content = f"{row['title']} | 设备: {row['device_type']} | 故障: {row['fault_symptom'] or ''} | 原因: {row['fault_cause'] or ''} | 方案: {row['solution']}"
-                        keyword_results[rid] = {
-                            "content": content,
-                            "source": "user_case",
-                            "record_id": rid,
-                            "aircraft_model": row["device_type"],
-                            "manufacturer": "",
-                            "description": (row["fault_symptom"] if case_type == "repair" else (row["maintenance_type"] if "maintenance_type" in row.keys() else "")) or "",
-                            "problem": (row["fault_cause"] if case_type == "repair" else (row["maintenance_cycle"] if "maintenance_cycle" in row.keys() else "")) or "",
-                            "action": row["solution"] or "",
-                            "case_type": case_type,
-                            "collection": "sqlite",
-                        }
-            except Exception as e:
-                logger.warning(f"SQLite 搜索失败: {e}")
-
-            # ===== 第三步：关键词计分 =====
-            result_list = list(keyword_results.values())
-            for r in result_list:
-                score, matched, total = self.compute_keyword_score(r, score_tokens, query)
+            for r in keyword_results.values():
+                score, matched, total = compute_keyword_score(r, score_tokens, query)
                 r["score"] = score
                 r["matched_tokens"] = matched
                 r["total_tokens"] = total
 
-            # ===== 第四步：如果关键词无结果，用向量 fallback =====
-            if not result_list:
-                logger.info("📊 关键词无结果，启动向量 fallback...")
-                vector_fallback = {}
-                for col_name in collections:
-                    try:
-                        vector_q = embedder.encode(query).tolist()
-                        vec_results = client.query_points(
-                            collection_name=col_name,
-                            query=vector_q,
-                            limit=20,
-                            with_payload=True
-                        ).points
-                        for r in vec_results:
-                            payload = r.payload or {}
-                            rid = payload.get("record_id", str(r.id))
-                            if rid not in vector_fallback:
-                                ct = payload.get("case_type", "")
-                                if ct == exclude_case_type:
-                                    continue
-                                vector_fallback[rid] = {
-                                    "content": payload.get("content", payload.get("text", "")),
-                                    "score": 0.45,
-                                    "source": payload.get("source", "unknown"),
-                                    "record_id": rid,
-                                    "aircraft_model": payload.get("aircraft_model", ""),
-                                    "manufacturer": payload.get("manufacturer", ""),
-                                    "description": payload.get("description", ""),
-                                    "problem": payload.get("problem", ""),
-                                    "action": payload.get("action", ""),
-                                    "case_type": ct,
-                                    "collection": col_name,
-                                    "matched_tokens": 0,
-                                    "total_tokens": len(query_tokens),
-                                }
-                    except Exception:
-                        pass
-                result_list = list(vector_fallback.values())
-                logger.info(f"📊 向量 fallback: 找到 {len(result_list)} 条")
+            kw_list = list(keyword_results.values())
+            hyde_list = hyde_mqe_search(self.llm, embedder, client, query, collections,
+                                        exclude_case_type, top_k=15)
 
-            # 排序
-            result_list.sort(key=lambda x: x["score"], reverse=True)
-            logger.info(f"📊 检索完成: 共 {len(result_list)} 条结果")
+            result_list = merge_and_sort_results(kw_list, hyde_list)
+
+            if not result_list:
+                logger.info("\U0001f4ca 混合检索无结果，启动纯向量 fallback...")
+                result_list = vector_fallback_search(client, embedder, query, collections, exclude_case_type)
+                logger.info(f"\U0001f4ca 向量 fallback: 找到 {len(result_list)} 条")
+
+            logger.info(f"\U0001f4ca 检索完成: 共 {len(result_list)} 条结果")
             return result_list[:50]
 
         except Exception as e:
-            logger.warning(f"⚠️ 知识检索失败: {e}")
+            logger.warning(f"\u26a0\ufe0f 知识检索失败: {e}")
             return []
     
     def _query_neo4j(self, keywords: List[str]) -> List[Dict]:
@@ -468,94 +175,115 @@ class RepairDiagnosisEngine:
         """
         try:
             from neo4j import GraphDatabase
-            
+
             driver = GraphDatabase.driver(
                 os.getenv("NEO4J_URI", "bolt://localhost:7687"),
                 auth=(os.getenv("NEO4J_USERNAME", "neo4j"), os.getenv("NEO4J_PASSWORD", "12345678"))
             )
-            
+
             results = []
-            
-            with driver.session() as session:
-                for keyword in keywords:
-                    keyword = keyword.strip()
-                    if not keyword:
-                        continue
-                    
-                    # 查询飞机型号
-                    r = session.run("""
-                        MATCH (a:AircraftModel)
-                        WHERE a.name CONTAINS $keyword
-                        OPTIONAL MATCH (a)-[:MANUFACTURED_BY]->(m:Manufacturer)
-                        OPTIONAL MATCH (rec:AviationRecord)-[:INVOLVES_AIRCRAFT]->(a)
-                        OPTIONAL MATCH (rec)-[:HAS_INCIDENT_TYPE]->(t:IncidentType)
-                        RETURN DISTINCT 
-                            'Aircraft' AS type,
-                            a.name AS name,
-                            collect(DISTINCT m.name)[..3] AS manufacturers,
-                            collect(DISTINCT t.name)[..5] AS incident_types,
-                            count(DISTINCT rec) AS record_count
-                        LIMIT 5
-                    """, keyword=keyword)
-                    
-                    for record in r:
-                        results.append({
-                            "type": "Aircraft",
-                            "name": record["name"],
-                            "manufacturers": record["manufacturers"],
-                            "incident_types": record["incident_types"],
-                            "record_count": record["record_count"],
-                            "source": "neo4j"
-                        })
-                    
-                    # 查询制造商
-                    r = session.run("""
-                        MATCH (m:Manufacturer)
-                        WHERE m.name CONTAINS $keyword
-                        OPTIONAL MATCH (a:AircraftModel)-[:MANUFACTURED_BY]->(m)
-                        RETURN DISTINCT 
-                            'Manufacturer' AS type,
-                            m.name AS name,
-                            collect(DISTINCT a.name)[..5] AS aircraft_models,
-                            count(DISTINCT a) AS aircraft_count
-                        LIMIT 5
-                    """, keyword=keyword)
-                    
-                    for record in r:
-                        results.append({
-                            "type": "Manufacturer",
-                            "name": record["name"],
-                            "aircraft_models": record["aircraft_models"],
-                            "aircraft_count": record["aircraft_count"],
-                            "source": "neo4j"
-                        })
-                    
-                    # 查询事故类型
-                    r = session.run("""
-                        MATCH (t:IncidentType)
-                        WHERE t.name CONTAINS $keyword
-                        OPTIONAL MATCH (rec:AviationRecord)-[:HAS_INCIDENT_TYPE]->(t)
-                        OPTIONAL MATCH (rec)-[:INVOLVES_AIRCRAFT]->(a:AircraftModel)
-                        RETURN DISTINCT 
-                            'IncidentType' AS type,
-                            t.name AS name,
-                            collect(DISTINCT a.name)[..5] AS related_aircraft,
-                            count(DISTINCT rec) AS record_count
-                        LIMIT 5
-                    """, keyword=keyword)
-                    
-                    for record in r:
-                        results.append({
-                            "type": "IncidentType",
-                            "name": record["name"],
-                            "related_aircraft": record["related_aircraft"],
-                            "record_count": record["record_count"],
-                            "source": "neo4j"
-                        })
-            
-            driver.close()
+
+            try:
+                with driver.session() as session:
+                    for keyword in keywords:
+                        keyword = keyword.strip()
+                        if not keyword:
+                            continue
+
+                        r = session.run("""
+                            MATCH (a:AircraftModel)
+                            WHERE a.name CONTAINS $keyword
+                            OPTIONAL MATCH (a)-[:MANUFACTURED_BY]->(m:Manufacturer)
+                            OPTIONAL MATCH (rec:AviationRecord)-[:INVOLVES_AIRCRAFT]->(a)
+                            OPTIONAL MATCH (rec)-[:HAS_INCIDENT_TYPE]->(t:IncidentType)
+                            RETURN DISTINCT
+                                'Aircraft' AS type,
+                                a.name AS name,
+                                collect(DISTINCT m.name)[..3] AS manufacturers,
+                                collect(DISTINCT t.name)[..5] AS incident_types,
+                                count(DISTINCT rec) AS record_count
+                            LIMIT 5
+                        """, keyword=keyword)
+
+                        for record in r:
+                            results.append({
+                                "type": "Aircraft",
+                                "name": record["name"],
+                                "manufacturers": record["manufacturers"],
+                                "incident_types": record["incident_types"],
+                                "record_count": record["record_count"],
+                                "source": "neo4j"
+                            })
+
+                        r = session.run("""
+                            MATCH (m:Manufacturer)
+                            WHERE m.name CONTAINS $keyword
+                            OPTIONAL MATCH (a:AircraftModel)-[:MANUFACTURED_BY]->(m)
+                            RETURN DISTINCT
+                                'Manufacturer' AS type,
+                                m.name AS name,
+                                collect(DISTINCT a.name)[..5] AS aircraft_models,
+                                count(DISTINCT a) AS aircraft_count
+                            LIMIT 5
+                        """, keyword=keyword)
+
+                        for record in r:
+                            results.append({
+                                "type": "Manufacturer",
+                                "name": record["name"],
+                                "aircraft_models": record["aircraft_models"],
+                                "aircraft_count": record["aircraft_count"],
+                                "source": "neo4j"
+                            })
+
+                        r = session.run("""
+                            MATCH (t:IncidentType)
+                            WHERE t.name CONTAINS $keyword
+                            OPTIONAL MATCH (rec:AviationRecord)-[:HAS_INCIDENT_TYPE]->(t)
+                            OPTIONAL MATCH (rec)-[:INVOLVES_AIRCRAFT]->(a:AircraftModel)
+                            RETURN DISTINCT
+                                'IncidentType' AS type,
+                                t.name AS name,
+                                collect(DISTINCT a.name)[..5] AS related_aircraft,
+                                count(DISTINCT rec) AS record_count
+                            LIMIT 5
+                        """, keyword=keyword)
+
+                        for record in r:
+                            results.append({
+                                "type": "IncidentType",
+                                "name": record["name"],
+                                "related_aircraft": record["related_aircraft"],
+                                "record_count": record["record_count"],
+                                "source": "neo4j"
+                            })
+
+                        r = session.run("""
+                            MATCH (q:QAPair)-[:BELONGS_TO]->(ch:QAChapter)
+                            WHERE q.question CONTAINS $keyword OR q.answer CONTAINS $keyword
+                            RETURN DISTINCT
+                                'QAPair' AS type,
+                                q.question AS name,
+                                ch.chapter_name AS chapter,
+                                q.answer AS answer,
+                                q.qa_no AS qa_no
+                            LIMIT 3
+                        """, keyword=keyword)
+
+                        for record in r:
+                            results.append({
+                                "type": "QAPair",
+                                "name": record["name"],
+                                "chapter": record["chapter"],
+                                "answer": record["answer"],
+                                "qa_no": record["qa_no"],
+                                "source": "neo4j"
+                            })
+            finally:
+                driver.close()
+
             return results
-            
+
         except Exception as e:
             logger.warning(f"⚠️ Neo4j 查询失败: {e}")
             return []
@@ -1113,67 +841,46 @@ class RepairDiagnosisEngine:
                 "difficulty": "未知"
             }
     
-    # ==================== 记录管理 ====================
-    
-    def _record_diagnosis(self, description: str, diagnosis: Dict, 
-                          severity: Dict):
-        """记录诊断过程到记忆"""
-        try:
-            content = (
-                f"故障诊断记录: {description[:100]}... "
-                f"| 故障类型: {diagnosis.get('fault_type', '未知')} "
-                f"| 损伤等级: {severity.get('level', '未知')}"
-            )
-            
-            self.memory.run({
-                "action": "add",
-                "content": content,
-                "memory_type": "episodic",
-                "importance": 0.8,
-                "topic": "diagnosis"
-            })
-        except Exception as e:
-            logger.warning(f"⚠️ 诊断记录失败: {e}")
-    
     # ==================== 历史查询 ====================
     
     def get_diagnosis_history(self, limit: int = 10) -> List[Dict]:
         """
         获取诊断历史
-        
+
         Args:
             limit: 返回数量
-            
+
         Returns:
             List[Dict]: 历史诊断记录
         """
         try:
-            # 搜索维修处理记录
-            result = self.memory.run({
+            results = self.memory.run({
                 "action": "search",
                 "query": "维修处理 工单 故障",
                 "limit": limit,
-                "memory_type": "episodic"
+                "memory_type": "episodic",
+                "raw": True
             })
-            
-            if isinstance(result, str):
-                # 如果返回字符串，可能是没有找到记录
-                if "未找到" in result:
-                    return []
-                return [{"content": result}]
-            
-            # 如果返回列表，格式化结果
-            if isinstance(result, list):
-                formatted = []
-                for r in result:
-                    if isinstance(r, dict):
-                        formatted.append(r)
-                    else:
-                        formatted.append({"content": str(r)})
-                return formatted
-            
-            return []
-            
+
+            if not isinstance(results, list):
+                return []
+
+            formatted = []
+            for r in results:
+                if hasattr(r, 'content'):
+                    formatted.append({
+                        "content": r.content,
+                        "importance": getattr(r, 'importance', 0),
+                        "memory_type": getattr(r, 'memory_type', 'episodic'),
+                        "timestamp": getattr(r, 'timestamp', ''),
+                        "metadata": getattr(r, 'metadata', {})
+                    })
+                elif isinstance(r, dict):
+                    formatted.append(r)
+                else:
+                    formatted.append({"content": str(r)})
+            return formatted
+
         except Exception as e:
             logger.error(f"❌ 获取诊断历史失败: {e}")
             return []

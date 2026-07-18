@@ -530,65 +530,6 @@
             <button id="btn-refresh-data-stats" class="btn btn-outline" style="margin-top: 16px;">🔄 刷新数据</button>
         </div>
 
-        <!-- 知识图谱可视化 -->
-        <div class="viz-section">
-            <h3>🗺️ 知识图谱可视化</h3>
-            <div class="viz-tabs">
-                <button class="viz-tab active" data-viz="overview">📊 总览</button>
-                <button class="viz-tab" data-viz="aircraft">🛩️ 飞机型号</button>
-                <button class="viz-tab" data-viz="incident">⚠️ 事故类型</button>
-                <button class="viz-tab" data-viz="manufacturer">🏭 制造商</button>
-                <button class="viz-tab" data-viz="heatmap">🔥 热力图</button>
-            </div>
-            
-            <!-- 总览 -->
-            <div class="viz-panel active" id="viz-overview">
-                <div class="viz-description">
-                    <p>展示维修知识图谱的整体结构，包括飞机型号、事故类型和制造商之间的关联关系。</p>
-                    <p class="viz-hint">💡 拖动节点可调整位置，滚轮缩放</p>
-                </div>
-                <div class="viz-stats" id="kg-stats"></div>
-                <div class="viz-container" id="kg-container"></div>
-                <button class="btn btn-outline btn-sm" onclick="loadKnowledgeGraph()">🔄 重新加载</button>
-            </div>
-            
-            <!-- 飞机型号 -->
-            <div class="viz-panel" id="viz-aircraft">
-                <div class="viz-description">
-                    <p>按飞机型号分类展示，显示各型号的事故分布和关联制造商。</p>
-                </div>
-                <div class="viz-container" id="kg-aircraft-container"></div>
-                <button class="btn btn-outline btn-sm" onclick="loadAircraftView()">🔄 重新加载</button>
-            </div>
-            
-            <!-- 事故类型 -->
-            <div class="viz-panel" id="viz-incident">
-                <div class="viz-description">
-                    <p>按事故类型分类展示，显示各类事故涉及的飞机型号和频率。</p>
-                </div>
-                <div class="viz-container" id="kg-incident-container"></div>
-                <button class="btn btn-outline btn-sm" onclick="loadIncidentView()">🔄 重新加载</button>
-            </div>
-            
-            <!-- 制造商 -->
-            <div class="viz-panel" id="viz-manufacturer">
-                <div class="viz-description">
-                    <p>按制造商分类展示，显示各制造商的飞机型号和事故统计。</p>
-                </div>
-                <div class="viz-container" id="kg-manufacturer-container"></div>
-                <button class="btn btn-outline btn-sm" onclick="loadManufacturerView()">🔄 重新加载</button>
-            </div>
-            
-            <!-- 热力图 -->
-            <div class="viz-panel" id="viz-heatmap">
-                <div class="viz-description">
-                    <p>展示飞机型号与事故类型的关联热力图，颜色越深表示关联越强。</p>
-                </div>
-                <div class="viz-container" id="kg-heatmap-container"></div>
-                <button class="btn btn-outline btn-sm" onclick="loadHeatmapView()">🔄 重新加载</button>
-            </div>
-        </div>
-
         <!-- 向量空间可视化 -->
         <div class="viz-section">
             <h3>🎯 向量空间可视化</h3>

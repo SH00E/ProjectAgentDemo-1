@@ -7,6 +7,7 @@
 import os
 import json
 import logging
+import re
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
@@ -63,6 +64,9 @@ class RepairKnowledgeBase:
                 "action": "add_document",
                 "file_path": file_path
             })
+            if isinstance(result, str) and "❌" in result:
+                logger.error(f"\u26a0\ufe0f RAG\u5bfc\u5165\u5931\u8d25: {result}")
+                return {"success": False, "message": f"\u5bfc\u5165\u5931\u8d25: {result}"}
             
             # 记录导入事件到记忆
             filename = os.path.basename(file_path)
@@ -147,6 +151,9 @@ class RepairKnowledgeBase:
                 "text": case_text,
                 "document_id": case_id
             })
+            if isinstance(result, str) and "❌" in result:
+                logger.error(f"\u26a0\ufe0f RAG\u6dfb\u52a0\u6848\u4f8b\u5931\u8d25: {result}")
+                return {"success": False, "message": f"\u6dfb\u52a0\u5931\u8d25: {result}"}
             
             # 记录到记忆
             self.memory.run({
@@ -254,6 +261,9 @@ class RepairKnowledgeBase:
                 "text": fault_text,
                 "document_id": doc_id
             })
+            if isinstance(result, str) and "❌" in result:
+                logger.error(f"\u26a0\ufe0f RAG\u6dfb\u52a0\u6545\u969c\u7801\u5931\u8d25: {result}")
+                return {"success": False, "message": f"\u6dfb\u52a0\u5931\u8d25: {result}"}
             
             logger.info(f"✅ 成功添加故障码: {code}")
             return {
@@ -286,13 +296,18 @@ class RepairKnowledgeBase:
                 "action": "search",
                 "query": query,
                 "limit": limit,
-                "min_score": min_score
+                "min_score": min_score,
+                "enable_advanced_search": True,
+                "include_citations": True
             })
-            
-            # 解析结果
+
             if isinstance(result, str):
+                if "未找到" in result or "❌" in result:
+                    return []
                 return self._parse_search_result(result)
-            return result
+            if isinstance(result, list):
+                return result
+            return []
             
         except Exception as e:
             logger.error(f"❌ 知识检索失败: {e}")
@@ -324,15 +339,25 @@ class RepairKnowledgeBase:
             return f"问答失败: {str(e)}"
     
     def _parse_search_result(self, result_text: str) -> List[Dict]:
-        """解析搜索结果文本"""
         results = []
-        # 简单解析，实际可能需要更复杂的逻辑
-        if "搜索结果" in result_text or "找到" in result_text:
-            results.append({
-                "content": result_text,
-                "score": 0.8
-            })
-        return results
+        lines = result_text.strip().split("\n")
+        current = None
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("\U0001f50d") or line.startswith("\U0001f4ca"):
+                continue
+            if re.match(r"^\d+\.", line):
+                if current and current.get("content"):
+                    results.append(current)
+                current = {"content": line, "score": 0.6}
+            elif current is not None:
+                if current.get("content"):
+                    current["content"] += " " + line
+        if current and current.get("content"):
+            results.append(current)
+        return results if results else [
+            {"content": result_text[:200], "score": 0.5}
+        ]
     
     # ==================== 统计信息 ====================
     

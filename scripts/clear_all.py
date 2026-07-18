@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 彻底清空所有数据库
-包括：Qdrant 向量库、Neo4j 图库、案例数据库、记忆数据库
+包括：Qdrant 向量库、Neo4j 图库、案例数据库、记忆数据库、QA知识库
 只负责清空，不执行导入操作
 """
 
@@ -218,27 +218,94 @@ def clear_memory_db():
             print(f"  ✗ 清空记忆数据库失败: {e}")
 
 
+def clear_qa():
+    """仅清空 QA 知识库数据（Qdrant + Neo4j）"""
+    print("\n" + "=" * 60)
+    print("[5/5] 清空 QA 知识库")
+    print("=" * 60)
+
+    qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
+    is_local = "localhost" in qdrant_url or "127.0.0.1" in qdrant_url
+
+    # Qdrant: 仅删除 source=qa_pair 的点
+    try:
+        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        client = QdrantClient(url=qdrant_url, trust_env=not is_local)
+        collections = [c.name for c in client.get_collections().collections]
+        for col_name in collections:
+            try:
+                client.delete(
+                    collection_name=col_name,
+                    points_selector=Filter(
+                        must=[FieldCondition(key="source", match=MatchValue(value="qa_pair"))]
+                    )
+                )
+                print(f"  Qdrant ({col_name}): QA 对已删除")
+            except Exception as e:
+                print(f"  Qdrant ({col_name}): 跳过 - {e}")
+    except Exception as e:
+        print(f"  Qdrant 连接失败: {e}")
+
+    # Neo4j: 仅删除 QAChapter/QAPair 节点 + 约束
+    try:
+        driver = GraphDatabase.driver(
+            os.getenv("NEO4J_URI", "bolt://localhost:7687"),
+            auth=(os.getenv("NEO4J_USERNAME", "neo4j"), os.getenv("NEO4J_PASSWORD", "12345678"))
+        )
+        try:
+            with driver.session() as session:
+                r = session.run("MATCH (q:QAPair) RETURN count(q) AS c").single()
+                qa_count = r["c"] if r else 0
+                r = session.run("MATCH (ch:QAChapter) RETURN count(ch) AS c").single()
+                ch_count = r["c"] if r else 0
+                print(f"  当前: {ch_count} 章节, {qa_count} QA 对")
+
+                session.run("MATCH (q:QAPair)-[r:BELONGS_TO]->(ch:QAChapter) DELETE r")
+                session.run("MATCH (q:QAPair) DELETE q")
+                session.run("MATCH (ch:QAChapter) DELETE ch")
+                print(f"  已删除所有 QA 章节和 QA 对")
+
+                for cypher in [
+                    "DROP CONSTRAINT QAPair_qa_no IF EXISTS",
+                    "DROP CONSTRAINT QAChapter_chapter_no IF EXISTS",
+                ]:
+                    try:
+                        session.run(cypher)
+                        print(f"  删除约束: {cypher}")
+                    except Exception:
+                        pass
+        finally:
+            driver.close()
+    except Exception as e:
+        print(f"  Neo4j 连接失败: {e}")
+
+    print("QA 知识库清空完成")
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="彻底清空所有数据库（Qdrant、Neo4j、案例库、记忆库）",
+        description="彻底清空所有数据库（Qdrant、Neo4j、案例库、记忆库、QA知识库）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
   python clear_all.py              # 清空所有数据库
   python clear_all.py --qdrant     # 只清空 Qdrant
+  python clear_all.py --neo4j      # 只清空 Neo4j
   python clear_all.py --cases      # 只清空案例数据库
   python clear_all.py --memory     # 只清空记忆数据库
+  python clear_all.py --qa         # 只清空 QA 知识库
+  python clear_all.py --qdrant --neo4j  # 只清空向量库和图库
         """
     )
     parser.add_argument("--qdrant", action="store_true", help="只清空 Qdrant")
     parser.add_argument("--neo4j", action="store_true", help="只清空 Neo4j")
     parser.add_argument("--cases", action="store_true", help="只清空案例数据库")
     parser.add_argument("--memory", action="store_true", help="只清空记忆数据库")
+    parser.add_argument("--qa", action="store_true", help="只清空 QA 知识库")
     parser.add_argument("--all", action="store_true", help="清空所有数据库（默认）")
     args = parser.parse_args()
     
-    # 如果没有指定任何参数，默认清空所有
-    if not (args.qdrant or args.neo4j or args.cases or args.memory or args.all):
+    if not (args.qdrant or args.neo4j or args.cases or args.memory or args.qa or args.all):
         args.all = True
     
     print("🗑️  数据库彻底清空工具")
@@ -257,6 +324,9 @@ def main():
     
     if args.all or args.memory:
         clear_memory_db()
+    
+    if args.qa:
+        clear_qa()
     
     print("\n" + "=" * 60)
     print("✅ 所有清空操作完成")

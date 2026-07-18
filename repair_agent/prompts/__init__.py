@@ -22,7 +22,13 @@ def get_prompt(*keys):
 
 def fmt_prompt(section, key, **kwargs):
     template = get_prompt(section, key)
-    return template.format(**kwargs)
+    safe_kwargs = {}
+    for k, v in kwargs.items():
+        if isinstance(v, str):
+            safe_kwargs[k] = v.replace('{', '{{').replace('}', '}}')
+        else:
+            safe_kwargs[k] = v
+    return template.format(**safe_kwargs)
 
 def random_reduce_count(count):
     if count <= 0:

@@ -71,14 +71,17 @@ class MemoryTool(Tool):
                 memory_type=parameters.get("memory_type", "working"),
                 importance=parameters.get("importance", 0.5),
                 file_path=parameters.get("file_path"),
-                modality=parameters.get("modality")
+                modality=parameters.get("modality"),
+                user_metadata=parameters.get("metadata"),
+                topic=parameters.get("topic")
             )
         elif action == "search":
             return self._search_memory(
                 query=parameters.get("query"),
                 limit=parameters.get("limit", 5),
                 memory_type=parameters.get("memory_type"),
-                min_importance=parameters.get("min_importance", 0.1)
+                min_importance=parameters.get("min_importance", 0.1),
+                raw=parameters.get("raw", False)
             )
         elif action == "summary":
             return self._get_summary(limit=parameters.get("limit", 10))
@@ -145,7 +148,9 @@ class MemoryTool(Tool):
         memory_type: str = "working",
         importance: float = 0.5,
         file_path: str = None,
-        modality: str = None
+        modality: str = None,
+        user_metadata: dict = None,
+        topic: str = None
     ) -> str:
         """添加记忆
 
@@ -155,6 +160,8 @@ class MemoryTool(Tool):
             importance: 重要性分数，0.0-1.0
             file_path: 感知记忆：本地文件路径（image/audio）
             modality: 感知记忆模态：text/image/audio（不传则按扩展名推断）
+            user_metadata: 用户提供的额外元数据
+            topic: 记忆主题标签
 
         Returns:
             执行结果
@@ -164,6 +171,12 @@ class MemoryTool(Tool):
             # 确保会话ID存在
             if self.current_session_id is None:
                 self.current_session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+            # 合并用户提供的元数据（先合并，确保不被内部字段意外覆盖）
+            if user_metadata:
+                metadata.update(user_metadata)
+            if topic:
+                metadata.setdefault("topic", topic)
 
             # 感知记忆文件支持：注入 raw_data 与模态
             if memory_type == "perceptual" and file_path:
@@ -208,8 +221,9 @@ class MemoryTool(Tool):
         query: str,
         limit: int = 5,
         memory_type: str = None,
-        min_importance: float = 0.1
-    ) -> str:
+        min_importance: float = 0.1,
+        raw: bool = False
+    ):
         """搜索记忆
 
         Args:
@@ -217,12 +231,12 @@ class MemoryTool(Tool):
             limit: 搜索结果数量限制
             memory_type: 限定记忆类型：working/episodic/semantic/perceptual
             min_importance: 最低重要性阈值
+            raw: 返回原始 MemoryItem 列表而非格式化字符串
 
         Returns:
-            搜索结果
+            搜索结果（str 或 List[MemoryItem]）
         """
         try:
-            # 处理memory_type参数
             memory_types = [memory_type] if memory_type else None
 
             results = self.memory_manager.retrieve_memories(
@@ -232,10 +246,12 @@ class MemoryTool(Tool):
                 min_importance=min_importance
             )
 
+            if raw:
+                return results
+
             if not results:
                 return f"🔍 未找到与 '{query}' 相关的记忆"
 
-            # 格式化结果
             formatted_results = []
             formatted_results.append(f"🔍 找到 {len(results)} 条相关记忆:")
 
@@ -362,33 +378,27 @@ class MemoryTool(Tool):
         这个方法可以被Agent调用来自动记录对话历史
         """
         self.conversation_count += 1
-        # 记录用户输入
         self._add_memory(
             content=f"用户: {user_input}",
             memory_type="working",
             importance=0.6,
-            type="user_input",
-            conversation_id=self.conversation_count
+            user_metadata={"conversation_id": self.conversation_count}
         )
 
-        # 记录Agent响应
         self._add_memory(
             content=f"助手: {agent_response}",
             memory_type="working",
             importance=0.7,
-            type="agent_response",
-            conversation_id=self.conversation_count
+            user_metadata={"conversation_id": self.conversation_count}
         )
 
-        # 如果是重要对话，记录为情景记忆
         if len(agent_response) > 100 or "重要" in user_input or "记住" in user_input:
             interaction_content = f"对话 - 用户: {user_input}\n助手: {agent_response}"
             self._add_memory(
                 content=interaction_content,
                 memory_type="episodic",
                 importance=0.8,
-                type="interaction",
-                conversation_id=self.conversation_count
+                user_metadata={"conversation_id": self.conversation_count}
             )
 
     @tool_action("memory_update", "更新已存在的记忆")
@@ -497,8 +507,7 @@ class MemoryTool(Tool):
             content=content,
             memory_type="semantic",
             importance=importance,
-            knowledge_type="factual",
-            source="manual"
+            user_metadata={"source": "manual"}
         )
 
     def get_context_for_query(self, query: str, limit: int = 3) -> str:

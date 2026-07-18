@@ -17,6 +17,12 @@ from typing import Dict, List, Optional
 from datetime import datetime
 
 from prompts import fmt_prompt
+from modules.retrieval_utils import (
+    normalize, clean_score_tokens, split_query_tokens, extract_domain_terms,
+    expand_recall_tokens, compute_keyword_score, get_relevance_label,
+    search_qdrant_keywords, search_sqlite_keywords,
+    vector_fallback_search, hyde_mqe_search, merge_and_sort_results
+)
 
 from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
@@ -32,6 +38,8 @@ logger = logging.getLogger(__name__)
 # ==================== 案例数据库 ====================
 
 CASES_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "memory_data", "cases.db")
+FEEDBACK_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "memory_data", "feedback.db")
+
 
 def init_cases_db():
     """初始化案例数据库"""
@@ -276,16 +284,14 @@ def diagnosis_stream(description: str, image_path: str = None, mode: str = "repa
                 for r in data:
                     # 构建证据链信息
                     source = r.get("source", "unknown")
-                    source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "知识图谱" if source == "neo4j" else "知识库"
+                    source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "知识图谱" if source == "neo4j" else "QA知识库" if source == "qa_pair" else "知识库"
                     
-                    # 计算相似度等级：基于关键词命中分数
                     final_score = r.get("score", 0)
-                    if final_score >= 1.0:
-                        relevance = "高"
-                    elif final_score >= 0.5:
-                        relevance = "中"
-                    else:
-                        relevance = "低"
+                    relevance = get_relevance_label(
+                        final_score,
+                        r.get("matched_tokens", 0),
+                        r.get("total_tokens", 0),
+                    )
                     
                     results.append({
                         "content": r.get("content", str(r))[:200],
@@ -318,20 +324,18 @@ def diagnosis_stream(description: str, image_path: str = None, mode: str = "repa
             evidence_chain = []
             for ref in knowledge_refs:
                 source = ref.get("source", "unknown")
-                source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "知识图谱" if source == "neo4j" else "知识库"
-                
-                # 处理 Neo4j 特有的字段
+                source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "知识图谱" if source == "neo4j" else "QA知识库" if source == "qa_pair" else "知识库"
+
                 details = ref.get("details", {})
                 aircraft_models = details.get("aircraft_models", [])
                 incident_types = details.get("incident_types", [])
                 
                 ev_score = ref.get("score", 0)
-                if ev_score >= 1.0:
-                    ev_rel = "高"
-                elif ev_score >= 0.5:
-                    ev_rel = "中"
-                else:
-                    ev_rel = "低"
+                ev_rel = get_relevance_label(
+                    ev_score,
+                    ref.get("matched_tokens", 0),
+                    ref.get("total_tokens", 0),
+                )
                 evidence_chain.append({
                     "content": ref.get("content", "")[:200],
                     "score": round(ref.get("score", 0), 3),
@@ -506,120 +510,6 @@ async def search_knowledge(request: Request):
         client = QdrantClient(url=qdrant_url, trust_env=not is_local)
         embedder = get_text_embedder()
         
-        def _normalize(text):
-            for sep in ['-', '_', ' ', '　', '/', '\\', '·', '•']:
-                text = text.replace(sep, '')
-            for particle in ['的', '了']:
-                text = text.replace(particle, '')
-            return text.lower().strip()
-
-        def _clean_score_tokens(tokens):
-            ignored_tokens = {
-                "装备型号", "装备名称", "型号", "名称", "系统名称", "部件名称", "相关部件",
-                "故障现象", "故障类型", "维护类型", "维护内容", "关键词", "无"
-            }
-            cleaned = []
-            ignored_norms = {_normalize(t) for t in ignored_tokens}
-            for token in tokens:
-                token = str(token).strip()
-                if not token or token in ignored_tokens:
-                    continue
-                if len(token) > 24:
-                    continue
-                token_norm = _normalize(token)
-                if not token_norm or token_norm in ignored_norms:
-                    continue
-                if token not in cleaned:
-                    cleaned.append(token)
-            return cleaned
-
-        def _split_query_tokens(q):
-            tokens = []
-            if 2 <= len(q) <= 24:
-                tokens.append(q)
-            for sep in [' ', ',', '，', '、', '/', '|', '-', '_']:
-                for part in q.split(sep):
-                    part = part.strip()
-                    if part and 2 <= len(part) <= 24 and part not in tokens:
-                        tokens.append(part)
-            for term in _extract_domain_terms(q):
-                if term not in tokens:
-                    tokens.append(term)
-            return tokens
-
-        def _extract_domain_terms(q):
-            terms = []
-            domain_terms = [
-                "空地导弹", "空舰导弹", "空射巡航导弹", "制导系统", "控制系统", "动力系统",
-                "电气系统", "引战系统", "弹体结构", "电视", "红外", "双模导引头", "导引头",
-                "光轴", "光轴偏差", "光轴平行性", "融合偏差", "精确制导", "频综器", "频率综合器",
-                "惯性导航", "惯组", "雷达", "数据链", "校准", "更换", "失锁", "漂移", "偏差"
-            ]
-            for term in domain_terms:
-                if term in q and term not in terms:
-                    terms.append(term)
-            for term in re.findall(r"[A-Za-z]+-?\d+[A-Za-z0-9-]*", q):
-                if term not in terms:
-                    terms.append(term)
-            return terms
-
-        def _expand_recall_tokens(tokens):
-            recall_tokens = list(tokens)
-            for part in list(tokens):
-                if len(part) >= 4:
-                    for win_size in [2, 3]:
-                        for k in range(len(part) - win_size + 1):
-                            token = part[k:k+win_size]
-                            if token not in recall_tokens:
-                                recall_tokens.append(token)
-            return recall_tokens
-
-        def _compute_keyword_score(record, query_tokens, full_q):
-            content = str(record.get("content", ""))
-            description = str(record.get("description", ""))
-            problem = str(record.get("problem", ""))
-            action = str(record.get("action", ""))
-            aircraft_model = str(record.get("aircraft_model", ""))
-            text = " ".join([content, description, problem, action, aircraft_model])
-            text_norm = _normalize(text)
-            total = len(query_tokens)
-            if total == 0:
-                return 0.0, 0, 0
-            matched = 0
-            matched_weight = 0.0
-            for token in query_tokens:
-                tn = _normalize(token)
-                if not tn:
-                    continue
-
-                field_weight = 0.0
-                if tn in _normalize(aircraft_model):
-                    field_weight = max(field_weight, 1.6)
-                if tn in _normalize(description):
-                    field_weight = max(field_weight, 1.35)
-                if tn in _normalize(problem):
-                    field_weight = max(field_weight, 1.35)
-                if tn in _normalize(action):
-                    field_weight = max(field_weight, 1.1)
-                if tn in _normalize(content):
-                    field_weight = max(field_weight, 1.2)
-
-                if field_weight > 0:
-                    matched += 1
-                    matched_weight += field_weight
-            ratio = matched / total
-            weighted_ratio = matched_weight / total
-            if matched == total and total > 1:
-                boost = 1.5
-            elif ratio >= 0.67:
-                boost = 1.2
-            else:
-                boost = 1.0
-            fq_norm = _normalize(full_q)
-            if fq_norm and fq_norm in text_norm:
-                boost = max(boost, 1.8)
-            return weighted_ratio * boost, matched, total
-
         # 先用LLM提取关键词，再检索
         try:
             llm = agent_state["agent"].llm
@@ -631,173 +521,58 @@ async def search_knowledge(request: Request):
             kw_response = llm.invoke(kw_messages)
             extracted = [k.strip() for k in kw_response.split(",") if k.strip() and k.strip() != "无"]
             if extracted:
-                score_tokens = _clean_score_tokens(extracted)
-                for term in _split_query_tokens(query):
+                score_tokens = clean_score_tokens(extracted)
+                for term in split_query_tokens(query):
                     if term not in score_tokens:
                         score_tokens.append(term)
                 logger.info(f"📝 提取到关键词: {extracted}")
             else:
-                score_tokens = _split_query_tokens(query)
+                score_tokens = split_query_tokens(query)
         except Exception as e:
             logger.warning(f"关键词提取失败，使用拆分: {e}")
-            score_tokens = _split_query_tokens(query)
-        score_tokens = _clean_score_tokens(score_tokens)
-        query_tokens = _expand_recall_tokens(score_tokens)
+            score_tokens = split_query_tokens(query)
+        score_tokens = clean_score_tokens(score_tokens)
+        query_tokens = expand_recall_tokens(score_tokens)
 
-        # ===== 关键词召回 =====
+        # ===== 关键词召回 (使用共享工具函数) =====
         collections = [c.name for c in client.get_collections().collections]
         keyword_results = {}
-
         for col_name in collections:
-            try:
-                kw_conditions = []
-                for qp in query_tokens:
-                    kw_conditions.extend([
-                        FieldCondition(key="content", match=MatchText(text=qp)),
-                        FieldCondition(key="text", match=MatchText(text=qp)),
-                        FieldCondition(key="description", match=MatchText(text=qp)),
-                        FieldCondition(key="description_zh", match=MatchText(text=qp)),
-                        FieldCondition(key="problem", match=MatchText(text=qp)),
-                        FieldCondition(key="problem_zh", match=MatchText(text=qp)),
-                        FieldCondition(key="action", match=MatchText(text=qp)),
-                        FieldCondition(key="action_zh", match=MatchText(text=qp)),
-                    ])
-                kw_filter = Filter(should=kw_conditions)
-                kw_scroll = client.scroll(
-                    collection_name=col_name,
-                    scroll_filter=kw_filter,
-                    limit=1000,
-                    with_payload=True
-                )
-                for point in kw_scroll[0]:
-                    payload = point.payload or {}
-                    rid = payload.get("record_id", str(point.id))
-                    if rid not in keyword_results:
-                        keyword_results[rid] = {
-                            "content": payload.get("content", payload.get("text", "")),
-                            "source": payload.get("source", "unknown"),
-                            "record_id": rid,
-                            "aircraft_model": payload.get("aircraft_model", ""),
-                            "manufacturer": payload.get("manufacturer", ""),
-                            "description": payload.get("description", "") or payload.get("description_zh", ""),
-                            "problem": payload.get("problem", "") or payload.get("problem_zh", ""),
-                            "action": payload.get("action", "") or payload.get("action_zh", ""),
-                            "case_type": payload.get("case_type", ""),
-                        }
-            except Exception as e:
-                logger.warning(f"关键词召回失败({col_name}): {e}")
+            search_qdrant_keywords(client, col_name, query_tokens, keyword_results)
+        search_sqlite_keywords(CASES_DB_PATH, score_tokens, query, keyword_results)
 
-        # ===== SQLite 关键词召回 =====
-        try:
-            conn = sqlite3.connect(CASES_DB_PATH)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            raw_tokens = list(score_tokens)
-            if query not in raw_tokens:
-                raw_tokens.insert(0, query)
-            sql_conditions = []
-            sql_params = []
-            for qp in raw_tokens:
-                lp = f"%{qp}%"
-                sql_conditions.append('''(title LIKE ? OR device_type LIKE ? OR fault_symptom LIKE ?
-                          OR fault_cause LIKE ? OR solution LIKE ? OR parts_used LIKE ?
-                          OR notes LIKE ? OR maintenance_type LIKE ? OR maintenance_cycle LIKE ?
-                          OR maintenance_standard LIKE ?)''')
-                sql_params.extend([lp] * 10)
-            if sql_conditions:
-                cursor.execute('SELECT DISTINCT * FROM cases WHERE ' + ' OR '.join(sql_conditions), sql_params)
-            rows = cursor.fetchall()
-            conn.close()
-            for row in rows:
-                case_id = row["id"]
-                rid = f"CASE_{case_id}"
-                if rid in keyword_results:
-                    continue
-                case_type = row["case_type"] if "case_type" in row.keys() else "repair"
-                if case_type == "maintenance":
-                    content = f"{row['title']} | 设备: {row['device_type']} | 维护类型: {row['maintenance_type'] if 'maintenance_type' in row.keys() else ''} | 周期: {row['maintenance_cycle'] if 'maintenance_cycle' in row.keys() else ''} | 方案: {row['solution']}"
-                else:
-                    content = f"{row['title']} | 设备: {row['device_type']} | 故障: {row['fault_symptom'] or ''} | 原因: {row['fault_cause'] or ''} | 方案: {row['solution']}"
-                keyword_results[rid] = {
-                    "content": content,
-                    "source": "user_case",
-                    "record_id": rid,
-                    "aircraft_model": row["device_type"],
-                    "manufacturer": "",
-                    "description": (row["fault_symptom"] if case_type == "repair" else (row["maintenance_type"] if "maintenance_type" in row.keys() else "")) or "",
-                    "problem": (row["fault_cause"] if case_type == "repair" else (row["maintenance_cycle"] if "maintenance_cycle" in row.keys() else "")) or "",
-                    "action": row["solution"] or "",
-                    "case_type": case_type,
-                }
-        except Exception as e:
-            logger.warning(f"SQLite 搜索失败: {e}")
-
-        # ===== 关键词计分 =====
-        result_list = list(keyword_results.values())
-        for r in result_list:
-            score, matched, total = _compute_keyword_score(r, score_tokens, query)
+        for r in keyword_results.values():
+            score, matched, total = compute_keyword_score(r, score_tokens, query)
             r["score"] = score
             r["matched_tokens"] = matched
             r["total_tokens"] = total
 
-        # ===== 向量 fallback =====
-        if not result_list:
-            logger.info("关键词无结果，启动向量 fallback")
-            vector_fallback = {}
-            for col_name in collections:
-                try:
-                    vec_q = embedder.encode(query).tolist()
-                    res = client.query_points(
-                        collection_name=col_name,
-                        query=vec_q,
-                        limit=20,
-                        with_payload=True
-                    ).points
-                    for r in res:
-                        payload = r.payload or {}
-                        rid = payload.get("record_id", str(r.id))
-                        if rid not in vector_fallback:
-                            vector_fallback[rid] = {
-                                "content": payload.get("content", payload.get("text", "")),
-                                "score": 0.45,
-                                "source": payload.get("source", "unknown"),
-                                "record_id": rid,
-                                "aircraft_model": payload.get("aircraft_model", ""),
-                                "manufacturer": payload.get("manufacturer", ""),
-                                "description": payload.get("description", ""),
-                                "problem": payload.get("problem", ""),
-                                "action": payload.get("action", ""),
-                                "case_type": payload.get("case_type", ""),
-                                "matched_tokens": 0,
-                                "total_tokens": len(query_tokens),
-                            }
-                except Exception:
-                    pass
-            result_list = list(vector_fallback.values())
+        kw_list = list(keyword_results.values())
+        hyde_list = hyde_mqe_search(llm, embedder, client, query, collections, top_k=15)
+        result_list = merge_and_sort_results(kw_list, hyde_list)
 
-        # 排序
-        sorted_results = sorted(result_list, key=lambda x: x["score"], reverse=True)
+        if not result_list:
+            result_list = vector_fallback_search(client, embedder, query, collections)
         
         # 计算分页
-        total = len(sorted_results)
+        total = len(result_list)
         total_pages = (total + page_size - 1) // page_size
         start_idx = (page - 1) * page_size
         end_idx = start_idx + page_size
-        paged_results = sorted_results[start_idx:end_idx]
+        paged_results = result_list[start_idx:end_idx]
         
         # 格式化结果
         enhanced_results = []
         for r in paged_results:
             source = r.get("source", "unknown")
-            source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "用户案例" if source == "user_case" else "知识库"
+            source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "用户案例" if source == "user_case" else "QA知识库" if source == "qa_pair" else "知识库"
             
             final_score = r.get("score", 0)
-            if final_score >= 1.0:
-                relevance = "高"
-            elif final_score >= 0.5:
-                relevance = "中"
-            else:
-                relevance = "低"
+            relevance = get_relevance_label(
+                final_score,
+                r.get("matched_tokens", 0),
+                r.get("total_tokens", 0),
+            )
             
             enhanced_results.append({
                 "content": r.get("content", ""),
@@ -1103,6 +878,23 @@ async def get_data_stats():
             conn_fb.close()
         except:
             pass
+
+        # QA 对统计 (从 Neo4j)
+        qa_pairs_count = 0
+        try:
+            from neo4j import GraphDatabase
+            driver = GraphDatabase.driver(
+                os.getenv("NEO4J_URI", "bolt://localhost:7687"),
+                auth=(os.getenv("NEO4J_USERNAME", "neo4j"), os.getenv("NEO4J_PASSWORD", "12345678"))
+            )
+            try:
+                with driver.session() as s:
+                    r = s.run("MATCH (q:QAPair) RETURN count(q) AS c").single()
+                    qa_pairs_count = r["c"] if r else 0
+            finally:
+                driver.close()
+        except:
+            pass
         
         return {
             "success": True,
@@ -1111,6 +903,7 @@ async def get_data_stats():
                     "total_cases": total_cases,
                     "repair_cases": repair_cases,
                     "maintenance_cases": maintenance_cases,
+                    "qa_pairs": qa_pairs_count,
                     "feedback_count": feedback_total
                 },
                 "fault_distribution": fault_distribution,
@@ -1125,97 +918,146 @@ async def get_data_stats():
 
 @app.get("/api/stats/knowledge-graph")
 async def get_knowledge_graph():
-    """获取知识图谱数据 - 简化版，只显示飞机型号、事故类型、制造商"""
+    """获取完整知识图谱数据 - 所有节点类型 + 关系，支持拖拽交互"""
     try:
         from neo4j import GraphDatabase
-        
+
         driver = GraphDatabase.driver(
             os.getenv("NEO4J_URI", "bolt://localhost:7687"),
             auth=(os.getenv("NEO4J_USERNAME", "neo4j"), os.getenv("NEO4J_PASSWORD", "12345678"))
         )
-        
+
         nodes = []
         links = []
         node_set = set()
-        
-        with driver.session() as s:
-            # 获取 Top 10 高频飞机型号
-            top_aircraft = []
-            for r in s.run("""
-                MATCH (r:AviationRecord)-[:INVOLVES_AIRCRAFT]->(a:AircraftModel)
-                RETURN a.name AS a, count(r) AS cnt
-                ORDER BY cnt DESC LIMIT 10
-            """):
-                top_aircraft.append(r["a"])
-            
-            # 获取 Top 8 事故类型
-            top_incidents = []
-            for r in s.run("""
-                MATCH (r:AviationRecord)-[:HAS_INCIDENT_TYPE]->(t:IncidentType)
-                RETURN t.name AS t, count(r) AS cnt
-                ORDER BY cnt DESC LIMIT 8
-            """):
-                top_incidents.append(r["t"])
-            
-            # 获取 Top 10 制造商
-            top_manufacturers = []
-            for r in s.run("""
-                MATCH (a:AircraftModel)-[:MANUFACTURED_BY]->(m:Manufacturer)
-                RETURN m.name AS m, count(a) AS cnt
-                ORDER BY cnt DESC LIMIT 10
-            """):
-                top_manufacturers.append(r["m"])
-            
-            # 添加飞机型号节点
-            for aircraft in top_aircraft:
-                nodes.append({"id": aircraft, "type": "Aircraft", "label": aircraft})
-                node_set.add(aircraft)
-            
-            # 添加事故类型节点
-            for incident in top_incidents:
-                nodes.append({"id": incident, "type": "Incident", "label": incident})
-                node_set.add(incident)
-            
-            # 添加制造商节点
-            for mfg in top_manufacturers:
-                nodes.append({"id": mfg, "type": "Manufacturer", "label": mfg})
-                node_set.add(mfg)
-            
-            # 获取飞机型号-事故类型关系（通过记录关联）
-            for r in s.run("""
-                MATCH (a:AircraftModel)<-[:INVOLVES_AIRCRAFT]-(r:AviationRecord)-[:HAS_INCIDENT_TYPE]->(t:IncidentType)
-                WHERE a.name IN $aircrafts AND t.name IN $incidents
-                RETURN DISTINCT a.name AS a, t.name AS t, count(r) AS cnt
-                ORDER BY cnt DESC LIMIT 30
-            """, aircrafts=top_aircraft, incidents=top_incidents):
-                links.append({"source": r["a"], "target": r["t"], "type": "HAS_INCIDENT", "count": r["cnt"]})
-            
-            # 获取飞机型号-制造商关系
-            for r in s.run("""
-                MATCH (a:AircraftModel)-[:MANUFACTURED_BY]->(m:Manufacturer)
-                WHERE a.name IN $aircrafts AND m.name IN $manufacturers
-                RETURN DISTINCT a.name AS a, m.name AS m
-            """, aircrafts=top_aircraft, manufacturers=top_manufacturers):
-                links.append({"source": r["a"], "target": r["m"], "type": "MANUFACTURED_BY"})
-        
-        driver.close()
-        
-        # 统计信息
-        aircraft_count = sum(1 for n in nodes if n["type"] == "Aircraft")
-        incident_count = sum(1 for n in nodes if n["type"] == "Incident")
-        manufacturer_count = sum(1 for n in nodes if n["type"] == "Manufacturer")
-        
+
+        try:
+            with driver.session() as s:
+                # 查询各类型节点总数
+                counts = {}
+                for r in s.run("""
+                    CALL {
+                        MATCH (a:AircraftModel) RETURN 'AircraftModel' AS t, count(a) AS c
+                        UNION ALL
+                        MATCH (m:Manufacturer) RETURN 'Manufacturer' AS t, count(m) AS c
+                        UNION ALL
+                        MATCH (t:IncidentType) RETURN 'IncidentType' AS t, count(t) AS c
+                        UNION ALL
+                        MATCH (l:Location) RETURN 'Location' AS t, count(l) AS c
+                        UNION ALL
+                        MATCH (q:QAPair) RETURN 'QAPair' AS t, count(q) AS c
+                        UNION ALL
+                        MATCH (ch:QAChapter) RETURN 'QAChapter' AS t, count(ch) AS c
+                        UNION ALL
+                        MATCH (r:AviationRecord) RETURN 'AviationRecord' AS t, count(r) AS c
+                    } RETURN t, c
+                """):
+                    counts[r["t"]] = r["c"]
+
+                # --- 节点收集 ---
+
+                # 全部 QA 章节 (最多20个)
+                for r in s.run("MATCH (ch:QAChapter) RETURN ch.chapter_no AS id, ch.chapter_name AS label ORDER BY ch.chapter_no"):
+                    nodes.append({"id": f"QAChapter_{r['id']}", "type": "QAChapter", "label": f"{r['label']}", "group": "qa"})
+                    node_set.add(f"QAChapter_{r['id']}")
+
+                # QA 对：每个章节取 Top 3
+                for r in s.run("""
+                    MATCH (q:QAPair)-[:BELONGS_TO]->(ch:QAChapter)
+                    WITH q, ch.chapter_no AS ch_id
+                    ORDER BY q.qa_no
+                    RETURN q.qa_no AS id, q.question AS label, ch_id
+                """):
+                    key = f"QAPair_{r['id']}"
+                    if key not in node_set:
+                        nodes.append({"id": key, "type": "QAPair", "label": r["label"][:50], "group": "qa"})
+                        node_set.add(key)
+                        links.append({"source": key, "target": f"QAChapter_{r['ch_id']}", "type": "BELONGS_TO"})
+
+                # 飞机型号 Top 15
+                top_aircraft = []
+                for r in s.run("""
+                    MATCH (rec:AviationRecord)-[:INVOLVES_AIRCRAFT]->(a:AircraftModel)
+                    RETURN a.name AS name, count(rec) AS cnt ORDER BY cnt DESC LIMIT 15
+                """):
+                    top_aircraft.append(r["name"])
+                    nodes.append({"id": r["name"], "type": "Aircraft", "label": r["name"], "group": "aviation"})
+                    node_set.add(r["name"])
+
+                # 制造商 Top 10
+                top_mfgs = []
+                for r in s.run("""
+                    MATCH (a:AircraftModel)-[:MANUFACTURED_BY]->(m:Manufacturer)
+                    RETURN m.name AS name, count(a) AS cnt ORDER BY cnt DESC LIMIT 10
+                """):
+                    top_mfgs.append(r["name"])
+                    nodes.append({"id": r["name"], "type": "Manufacturer", "label": r["name"], "group": "aviation"})
+                    node_set.add(r["name"])
+
+                # 事故类型 Top 10
+                top_incidents = []
+                for r in s.run("""
+                    MATCH (rec:AviationRecord)-[:HAS_INCIDENT_TYPE]->(t:IncidentType)
+                    RETURN t.name AS name, count(rec) AS cnt ORDER BY cnt DESC LIMIT 10
+                """):
+                    top_incidents.append(r["name"])
+                    nodes.append({"id": r["name"], "type": "IncidentType", "label": r["name"], "group": "aviation"})
+                    node_set.add(r["name"])
+
+                # 地点 Top 5
+                for r in s.run("""
+                    MATCH (rec:AviationRecord)-[:OCCURRED_IN]->(l:Location)
+                    RETURN l.name AS name, count(rec) AS cnt ORDER BY cnt DESC LIMIT 5
+                """):
+                    nodes.append({"id": r["name"], "type": "Location", "label": r["name"], "group": "aviation"})
+                    node_set.add(r["name"])
+
+                # --- 关系收集 ---
+
+                # 飞机型号 - 制造商
+                for r in s.run("""
+                    MATCH (a:AircraftModel)-[:MANUFACTURED_BY]->(m:Manufacturer)
+                    WHERE a.name IN $aircrafts AND m.name IN $mfgs
+                    RETURN DISTINCT a.name AS a, m.name AS m
+                """, aircrafts=top_aircraft, mfgs=top_mfgs):
+                    links.append({"source": r["a"], "target": r["m"], "type": "MANUFACTURED_BY"})
+
+                # 飞机型号 - 事故类型 (通过记录)
+                for r in s.run("""
+                    MATCH (a:AircraftModel)<-[:INVOLVES_AIRCRAFT]-(rec:AviationRecord)-[:HAS_INCIDENT_TYPE]->(t:IncidentType)
+                    WHERE a.name IN $aircrafts AND t.name IN $incidents
+                    RETURN DISTINCT a.name AS a, t.name AS t, count(rec) AS cnt
+                    ORDER BY cnt DESC LIMIT 40
+                """, aircrafts=top_aircraft, incidents=top_incidents):
+                    links.append({"source": r["a"], "target": r["t"], "type": "HAS_INCIDENT", "weight": r["cnt"]})
+
+                # 飞机型号 - 地点
+                for r in s.run("""
+                    MATCH (a:AircraftModel)<-[:INVOLVES_AIRCRAFT]-(rec:AviationRecord)-[:OCCURRED_IN]->(l:Location)
+                    WHERE a.name IN $aircrafts
+                    RETURN DISTINCT a.name AS a, l.name AS l, count(rec) AS cnt
+                    ORDER BY cnt DESC LIMIT 20
+                """, aircrafts=top_aircraft):
+                    links.append({"source": r["a"], "target": r["l"], "type": "OCCURRED_IN", "weight": r["cnt"]})
+
+        finally:
+            driver.close()
+
+        by_type = {}
+        for n in nodes:
+            t = n["type"]
+            by_type[t] = by_type.get(t, 0) + 1
+
         return {
             "success": True,
             "data": {
                 "nodes": nodes,
                 "links": links,
                 "stats": {
-                    "aircraft": aircraft_count,
-                    "incidents": incident_count,
-                    "manufacturers": manufacturer_count,
                     "total_nodes": len(nodes),
-                    "total_links": len(links)
+                    "total_links": len(links),
+                    "by_type": by_type,
+                    "counts": counts
                 }
             }
         }
@@ -1417,8 +1259,6 @@ async def ask_question(request: Request):
     )
 
 # ==================== 系统反馈 API ====================
-
-FEEDBACK_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "memory_data", "feedback.db")
 
 def init_feedback_db():
     """初始化反馈数据库"""

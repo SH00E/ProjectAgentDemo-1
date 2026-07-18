@@ -38,7 +38,7 @@ def test_diagnosis():
     agent = RepairAgent(user_id="test_user")
     
     # 扫描测试图片
-    img_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_images")
+    img_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_image")
     image_files = []
     if os.path.isdir(img_dir):
         for ext in ("*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp"):
@@ -208,20 +208,11 @@ def main():
         launch_app(host=args.host, port=args.port)
 
     elif args.mode == "web-gradio":
-        # 启动 Gradio Web 界面（向后兼容）
         print("\n" + "=" * 60)
         print("[Repair Agent] Gradio Web Interface")
         print("=" * 60)
-        print(f"Starting web server...")
-        print(f"URL: http://{args.host}:{args.port}")
+        print("Gradio 界面已移除，请使用默认的 FastAPI 界面: python main.py --mode web")
         print("=" * 60)
-
-        from ui.gradio_app import launch_ui
-        launch_ui(
-            server_name=args.host,
-            server_port=args.port,
-            share=args.share
-        )
         
     elif args.mode == "test":
         # 命令行测试
