@@ -48,11 +48,14 @@ docker run -d -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/12345678 neo4j
 
 **方式一：一键导入所有数据（推荐）**
 ```bash
-# 全量导入
+# 全量导入（默认跳过 FAA 航空数据）
 python scripts/import_all.py
 
 # 测试导入（每个文件只导入 10 条）
 python scripts/import_all.py --sample 10
+
+# 含 FAA 全量导入
+python scripts/import_all.py --aviation
 ```
 
 **方式二：分步导入**

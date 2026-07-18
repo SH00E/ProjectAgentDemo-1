@@ -2,9 +2,12 @@
 
 ## Project Overview
 
-智能维修诊断系统（家电/汽车领域）。用户输入故障描述+可选照片，系统检索知识库、调用LLM诊断、评估损伤等级、生成维修工单。
+智能维修诊断系统（装备保障领域）。用户输入故障描述+可选照片，系统检索知识库、调用LLM诊断、评估损伤等级、生成维修工单。
 
-技术栈: Python 3.10+ / hello-agents框架 / DeepSeek LLM / Qdrant向量库 / Neo4j图库 / Gradio UI
+技术栈: Python 3.10+ / hello-agents框架 / DeepSeek LLM / Qdrant向量库 / Neo4j图库 / FastAPI UI
+
+> **注意**: FAA 航空数据（OMIn 数据集）当前导入但不参与诊断检索，主要知识来源为 QA 知识库 + 维修/维护案例。
+> 导入时默认跳过 FAA，如需导入加 `--aviation` 标志。
 
 ## Quick Start
 
@@ -14,13 +17,14 @@ cd repair_agent
 python main.py --mode web      # FastAPI界面 http://127.0.0.1:7860
 python main.py --mode test     # 命令行诊断测试
 
-# （可选）翻译航空数据为中文 - 增量翻译，支持中断后继续
-python repair_agent/dataset/processed_data/omin/translate_data.py --sample 100  # 测试翻译100条
-python repair_agent/dataset/processed_data/omin/translate_data.py               # 全量翻译
+# 导入数据（默认跳过 FAA 航空数据）
+python scripts/import_all.py               # 导入案例 + QA 知识库
+python scripts/import_all.py --sample 10   # 测试模式
+python scripts/import_all.py --aviation    # 含 FAA 全量导入
 
-# 导入航空数据集到 Qdrant + Neo4j
-python scripts/import_aviation.py --sample 10   # 测试导入10条
-python scripts/import_aviation.py --all          # 全量导入~9k条
+# 构建 QA 跨章关联（知识图谱连通）
+python scripts/build_qa_relations.py --dry-run   # 预览
+python scripts/build_qa_relations.py             # 执行
 ```
 
 ## Architecture

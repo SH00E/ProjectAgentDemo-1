@@ -1018,6 +1018,16 @@ async def get_knowledge_graph():
                 """, aircrafts=top_aircraft):
                     links.append({"source": r["a"], "target": r["l"], "type": "OCCURRED_IN", "weight": r["cnt"]})
 
+                # QA 跨章关联
+                qa_ids = [n["id"].replace("QAPair_", "") for n in nodes if n["type"] == "QAPair"]
+                if qa_ids:
+                    for r in s.run("""
+                        MATCH (q1:QAPair)-[rel:RELATED_TO]->(q2:QAPair)
+                        WHERE q1.qa_no IN $qa_ids AND q2.qa_no IN $qa_ids AND q1.qa_no < q2.qa_no
+                        RETURN q1.qa_no AS a, q2.qa_no AS b, rel.terms AS terms
+                    """, qa_ids=qa_ids):
+                        links.append({"source": f"QAPair_{r['a']}", "target": f"QAPair_{r['b']}", "type": "RELATED_TO", "weight": 1})
+
         finally:
             driver.close()
 
