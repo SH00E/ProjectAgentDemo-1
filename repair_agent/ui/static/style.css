@@ -640,30 +640,7 @@ textarea {
     color: #991b1b;
 }
 
-/* ==================== 相关度标签 ==================== */
-
-.relevance-badge {
-    display: inline-block;
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 600;
-}
-
-.relevance-high {
-    background: #dcfce7;
-    color: #166534;
-}
-
-.relevance-medium {
-    background: #fef3c7;
-    color: #92400e;
-}
-
-.relevance-low {
-    background: #fee2e2;
-    color: #991b1b;
-}
+/* ==================== 匹配类型标签 ==================== */
 
 .match-type-badge {
     display: inline-block;
@@ -1550,29 +1527,6 @@ textarea {
     border-radius: 4px;
     font-size: 12px;
     color: #475569;
-}
-
-.detail-relevance {
-    display: inline-block;
-    padding: 4px 10px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: 600;
-}
-
-.detail-relevance.high {
-    background: #dcfce7;
-    color: #166534;
-}
-
-.detail-relevance.medium {
-    background: #fef3c7;
-    color: #92400e;
-}
-
-.detail-relevance.low {
-    background: #fee2e2;
-    color: #991b1b;
 }
 
 /* 可点击的内容项 */

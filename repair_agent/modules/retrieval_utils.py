@@ -148,14 +148,6 @@ def compute_keyword_score(record: Dict, query_tokens: List[str], full_query: str
     return score, matched, total
 
 
-def get_relevance_label(score: float, matched_tokens: int = 0, total_tokens: int = 0) -> str:
-    mostly_matched = total_tokens > 0 and matched_tokens * 3 >= total_tokens * 2
-    if score >= 1.5 or (score >= 1.0 and matched_tokens >= 2) or (score >= 0.9 and matched_tokens >= 2 and mostly_matched):
-        return "\u9ad8"
-    if score >= 0.5 or matched_tokens >= 1:
-        return "\u4e2d"
-    return "\u4f4e"
-
 
 def search_qdrant_keywords(client, collection_name: str, query_tokens: List[str],
                            keyword_results: Dict, exclude_case_type: str = None):

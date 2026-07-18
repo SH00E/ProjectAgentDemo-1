@@ -19,7 +19,7 @@ from datetime import datetime
 from prompts import fmt_prompt
 from modules.retrieval_utils import (
     normalize, clean_score_tokens, split_query_tokens, extract_domain_terms,
-    expand_recall_tokens, compute_keyword_score, get_relevance_label,
+    expand_recall_tokens, compute_keyword_score,
     search_qdrant_keywords, search_sqlite_keywords,
     vector_fallback_search, hyde_mqe_search, merge_and_sort_results
 )
@@ -285,18 +285,10 @@ def diagnosis_stream(description: str, image_path: str = None, mode: str = "repa
                     # 构建证据链信息
                     source = r.get("source", "unknown")
                     source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "知识图谱" if source == "neo4j" else "QA知识库" if source == "qa_pair" else "知识库"
-                    
-                    final_score = r.get("score", 0)
-                    relevance = get_relevance_label(
-                        final_score,
-                        r.get("matched_tokens", 0),
-                        r.get("total_tokens", 0),
-                    )
-                    
+
                     results.append({
                         "content": r.get("content", str(r))[:200],
                         "score": round(r.get("score", 0), 3),
-                        "relevance": relevance,
                         "source": source,
                         "source_label": source_label,
                         "record_id": r.get("record_id", ""),
@@ -331,15 +323,9 @@ def diagnosis_stream(description: str, image_path: str = None, mode: str = "repa
                 incident_types = details.get("incident_types", [])
                 
                 ev_score = ref.get("score", 0)
-                ev_rel = get_relevance_label(
-                    ev_score,
-                    ref.get("matched_tokens", 0),
-                    ref.get("total_tokens", 0),
-                )
                 evidence_chain.append({
                     "content": ref.get("content", "")[:200],
                     "score": round(ref.get("score", 0), 3),
-                    "relevance": ev_rel,
                     "source": source,
                     "source_label": source_label,
                     "record_id": ref.get("record_id", ""),
@@ -566,18 +552,10 @@ async def search_knowledge(request: Request):
         for r in paged_results:
             source = r.get("source", "unknown")
             source_label = "FAA事故数据" if source == "faa" else "MaintNet维修数据" if source == "maintnet" else "用户案例" if source == "user_case" else "QA知识库" if source == "qa_pair" else "知识库"
-            
-            final_score = r.get("score", 0)
-            relevance = get_relevance_label(
-                final_score,
-                r.get("matched_tokens", 0),
-                r.get("total_tokens", 0),
-            )
-            
+
             enhanced_results.append({
                 "content": r.get("content", ""),
                 "score": round(r.get("score", 0), 3),
-                "relevance": relevance,
                 "source": source_label,
                 "record_id": r.get("record_id", ""),
                 "aircraft_model": r.get("aircraft_model", ""),

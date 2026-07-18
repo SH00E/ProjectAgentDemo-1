@@ -15,7 +15,7 @@ from datetime import datetime
 from prompts import fmt_prompt, random_reduce_count
 from .retrieval_utils import (
     normalize, clean_score_tokens, split_query_tokens, extract_domain_terms,
-    expand_recall_tokens, compute_keyword_score, get_relevance_label,
+    expand_recall_tokens, compute_keyword_score,
     search_qdrant_keywords, search_sqlite_keywords,
     vector_fallback_search, hyde_mqe_search, merge_and_sort_results,
     DOMAIN_TERMS
