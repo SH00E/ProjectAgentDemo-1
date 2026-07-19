@@ -1507,7 +1507,18 @@ async function loadKnowledgeGraph() {
         
         const { nodes, links } = result.data;
 
-        renderKnowledgeGraph(container, nodes, links);
+        // 限制每章最多显示 2 个 QAPair，减少节点密集度
+        const qaPerChapter = {};
+        const filteredNodes = nodes.filter(n => {
+            if (n.type !== 'QAPair') return true;
+            const chId = links.find(l => l.source === n.id && l.type === 'BELONGS_TO')?.target
+                      || links.find(l => l.target === n.id && l.type === 'BELONGS_TO')?.source;
+            if (!chId) return false;
+            qaPerChapter[chId] = (qaPerChapter[chId] || 0) + 1;
+            return qaPerChapter[chId] <= 2;
+        });
+
+        renderKnowledgeGraph(container, filteredNodes, links);
         
     } catch (error) {
         container.innerHTML = `<div class="viz-empty"><div class="viz-empty-icon">❌</div><div class="viz-empty-text">加载失败: ${error.message}</div></div>`;
@@ -1519,7 +1530,7 @@ function renderKnowledgeGraph(container, nodes, links) {
     container.innerHTML = '';
     
     const width = container.clientWidth || 900;
-    const height = 500;
+    const height = 550;
     
     // 颜色映射
     const colorMap = {
@@ -1574,22 +1585,34 @@ function renderKnowledgeGraph(container, nodes, links) {
         .attr('fill', '#94a3b8')
         .attr('d', 'M0,-5L10,0L0,5');
     
-    // 创建力导向模拟
-    kgSimulation = d3.forceSimulation(nodes)
-        .force('link', d3.forceLink(links).id(d => d.id).distance(80))
-        .force('charge', d3.forceManyBody().strength(-200))
-        .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('collision', d3.forceCollide().radius(d => (radiusScale[d.type] || 10) + 8));
+    // 按类型过滤并排序链接数量（只保留核心关系）
+    const visibleLinks = links.filter(l => {
+        const show = ['BELONGS_TO', 'RELATED_TO', 'MANUFACTURED_BY'];
+        return show.includes(l.type);
+    });
     
-    // 绘制边
+    const linkStyle = {
+        'BELONGS_TO':     { stroke: '#4ade80', width: 1.8, opacity: 0.7, dash: null, dist: 35, strength: 0.6 },
+        'RELATED_TO':     { stroke: '#60a5fa', width: 1.0, opacity: 0.35, dash: '5,5', dist: 70, strength: 0.15 },
+        'MANUFACTURED_BY':{ stroke: '#94a3b8', width: 1.2, opacity: 0.5, dash: null, dist: 60, strength: 0.25 },
+    };
+    
+    kgSimulation = d3.forceSimulation(nodes)
+        .force('link', d3.forceLink(visibleLinks).id(d => d.id)
+            .distance(d => (linkStyle[d.type] || {}).dist || 60)
+            .strength(d => (linkStyle[d.type] || {}).strength || 0.3))
+        .force('charge', d3.forceManyBody().strength(-120))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('collision', d3.forceCollide().radius(d => (radiusScale[d.type] || 10) + 6));
+    
     const link = g.append('g')
         .selectAll('line')
-        .data(links)
+        .data(visibleLinks)
         .join('line')
-        .attr('class', 'link')
-        .attr('stroke', '#cbd5e1')
-        .attr('stroke-width', 1.5)
-        .attr('marker-end', 'url(#arrow)');
+        .attr('stroke', d => (linkStyle[d.type] || {}).stroke || '#cbd5e1')
+        .attr('stroke-width', d => (linkStyle[d.type] || {}).width || 1)
+        .attr('stroke-opacity', d => (linkStyle[d.type] || {}).opacity || 0.5)
+        .attr('stroke-dasharray', d => (linkStyle[d.type] || {}).dash || null);
     
     // 绘制节点组
     const node = g.append('g')
@@ -1653,10 +1676,34 @@ function renderKnowledgeGraph(container, nodes, links) {
         d.fx = null;
         d.fy = null;
         kgSimulation.alphaTarget(0.1).restart();
-        // 视觉反馈
         d3.select(event.currentTarget).select('circle')
             .attr('stroke', '#334155')
             .attr('stroke-width', 1.5);
+    });
+
+    // 连线图例
+    const legend = d3.select(container).append('div')
+        .attr('class', 'kg-legend')
+        .style('margin-top', '8px')
+        .style('display', 'flex')
+        .style('gap', '16px')
+        .style('flex-wrap', 'wrap')
+        .style('font-size', '12px')
+        .style('color', '#94a3b8');
+
+    const legendItems = [
+        { label: '章节归属', color: '#4ade80', dash: null },
+        { label: '跨章关联', color: '#60a5fa', dash: '5,5' },
+        { label: '制造商', color: '#94a3b8', dash: null },
+    ];
+
+    legendItems.forEach(item => {
+        const row = legend.append('div').style('display', 'flex').style('align-items', 'center').style('gap', '6px');
+        row.append('div')
+            .style('width', '20px').style('height', '2px')
+            .style('background', item.color)
+            .style('border-top', item.dash ? `${item.dash} ${item.color}` : `2px solid ${item.color}`);
+        row.append('span').text(item.label);
     });
 }
 
