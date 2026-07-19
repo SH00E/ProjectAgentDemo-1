@@ -915,19 +915,9 @@ async def get_knowledge_graph():
                 counts = {}
                 for r in s.run("""
                     CALL {
-                        MATCH (a:AircraftModel) RETURN 'AircraftModel' AS t, count(a) AS c
-                        UNION ALL
-                        MATCH (m:Manufacturer) RETURN 'Manufacturer' AS t, count(m) AS c
-                        UNION ALL
-                        MATCH (t:IncidentType) RETURN 'IncidentType' AS t, count(t) AS c
-                        UNION ALL
-                        MATCH (l:Location) RETURN 'Location' AS t, count(l) AS c
-                        UNION ALL
                         MATCH (q:QAPair) RETURN 'QAPair' AS t, count(q) AS c
                         UNION ALL
                         MATCH (ch:QAChapter) RETURN 'QAChapter' AS t, count(ch) AS c
-                        UNION ALL
-                        MATCH (r:AviationRecord) RETURN 'AviationRecord' AS t, count(r) AS c
                     } RETURN t, c
                 """):
                     counts[r["t"]] = r["c"]
@@ -951,72 +941,6 @@ async def get_knowledge_graph():
                         nodes.append({"id": key, "type": "QAPair", "label": r["label"][:50], "group": "qa"})
                         node_set.add(key)
                         links.append({"source": key, "target": f"QAChapter_{r['ch_id']}", "type": "BELONGS_TO"})
-
-                # 飞机型号 Top 15
-                top_aircraft = []
-                for r in s.run("""
-                    MATCH (rec:AviationRecord)-[:INVOLVES_AIRCRAFT]->(a:AircraftModel)
-                    RETURN a.name AS name, count(rec) AS cnt ORDER BY cnt DESC LIMIT 15
-                """):
-                    top_aircraft.append(r["name"])
-                    nodes.append({"id": r["name"], "type": "Aircraft", "label": r["name"], "group": "aviation"})
-                    node_set.add(r["name"])
-
-                # 制造商 Top 10
-                top_mfgs = []
-                for r in s.run("""
-                    MATCH (a:AircraftModel)-[:MANUFACTURED_BY]->(m:Manufacturer)
-                    RETURN m.name AS name, count(a) AS cnt ORDER BY cnt DESC LIMIT 10
-                """):
-                    top_mfgs.append(r["name"])
-                    nodes.append({"id": r["name"], "type": "Manufacturer", "label": r["name"], "group": "aviation"})
-                    node_set.add(r["name"])
-
-                # 事故类型 Top 10
-                top_incidents = []
-                for r in s.run("""
-                    MATCH (rec:AviationRecord)-[:HAS_INCIDENT_TYPE]->(t:IncidentType)
-                    RETURN t.name AS name, count(rec) AS cnt ORDER BY cnt DESC LIMIT 10
-                """):
-                    top_incidents.append(r["name"])
-                    nodes.append({"id": r["name"], "type": "IncidentType", "label": r["name"], "group": "aviation"})
-                    node_set.add(r["name"])
-
-                # 地点 Top 5
-                for r in s.run("""
-                    MATCH (rec:AviationRecord)-[:OCCURRED_IN]->(l:Location)
-                    RETURN l.name AS name, count(rec) AS cnt ORDER BY cnt DESC LIMIT 5
-                """):
-                    nodes.append({"id": r["name"], "type": "Location", "label": r["name"], "group": "aviation"})
-                    node_set.add(r["name"])
-
-                # --- 关系收集 ---
-
-                # 飞机型号 - 制造商
-                for r in s.run("""
-                    MATCH (a:AircraftModel)-[:MANUFACTURED_BY]->(m:Manufacturer)
-                    WHERE a.name IN $aircrafts AND m.name IN $mfgs
-                    RETURN DISTINCT a.name AS a, m.name AS m
-                """, aircrafts=top_aircraft, mfgs=top_mfgs):
-                    links.append({"source": r["a"], "target": r["m"], "type": "MANUFACTURED_BY"})
-
-                # 飞机型号 - 事故类型 (通过记录)
-                for r in s.run("""
-                    MATCH (a:AircraftModel)<-[:INVOLVES_AIRCRAFT]-(rec:AviationRecord)-[:HAS_INCIDENT_TYPE]->(t:IncidentType)
-                    WHERE a.name IN $aircrafts AND t.name IN $incidents
-                    RETURN DISTINCT a.name AS a, t.name AS t, count(rec) AS cnt
-                    ORDER BY cnt DESC LIMIT 40
-                """, aircrafts=top_aircraft, incidents=top_incidents):
-                    links.append({"source": r["a"], "target": r["t"], "type": "HAS_INCIDENT", "weight": r["cnt"]})
-
-                # 飞机型号 - 地点
-                for r in s.run("""
-                    MATCH (a:AircraftModel)<-[:INVOLVES_AIRCRAFT]-(rec:AviationRecord)-[:OCCURRED_IN]->(l:Location)
-                    WHERE a.name IN $aircrafts
-                    RETURN DISTINCT a.name AS a, l.name AS l, count(rec) AS cnt
-                    ORDER BY cnt DESC LIMIT 20
-                """, aircrafts=top_aircraft):
-                    links.append({"source": r["a"], "target": r["l"], "type": "OCCURRED_IN", "weight": r["cnt"]})
 
                 # QA 跨章关联
                 qa_ids = [n["id"].replace("QAPair_", "") for n in nodes if n["type"] == "QAPair"]

@@ -1537,23 +1537,13 @@ function renderKnowledgeGraph(container, nodes, links) {
     
     // 颜色映射
     const colorMap = {
-        'Aircraft': '#f87171',
-        'Manufacturer': '#f59e0b',
-        'IncidentType': '#ef4444',
-        'Location': '#a78bfa',
         'QAChapter': '#34d399',
         'QAPair': '#10b981',
-        'AviationRecord': '#64748b',
     };
     
     const radiusScale = {
         'QAChapter': 16,
-        'Aircraft': 14,
-        'Manufacturer': 12,
-        'IncidentType': 11,
-        'Location': 10,
         'QAPair': 7,
-        'AviationRecord': 6,
     };
 
     // 创建SVG
@@ -1590,14 +1580,13 @@ function renderKnowledgeGraph(container, nodes, links) {
     
     // 按类型过滤并排序链接数量（只保留核心关系）
     const visibleLinks = links.filter(l => {
-        const show = ['BELONGS_TO', 'RELATED_TO', 'MANUFACTURED_BY'];
+        const show = ['BELONGS_TO', 'RELATED_TO'];
         return show.includes(l.type);
     });
     
     const linkStyle = {
-        'BELONGS_TO':     { stroke: '#4ade80', width: 1.8, opacity: 0.7, dash: null, dist: 35, strength: 0.6 },
-        'RELATED_TO':     { stroke: '#60a5fa', width: 1.0, opacity: 0.35, dash: '5,5', dist: 70, strength: 0.15 },
-        'MANUFACTURED_BY':{ stroke: '#94a3b8', width: 1.2, opacity: 0.5, dash: null, dist: 60, strength: 0.25 },
+        'BELONGS_TO': { stroke: '#4ade80', width: 1.8, opacity: 0.7, dash: null, dist: 35, strength: 0.6 },
+        'RELATED_TO': { stroke: '#60a5fa', width: 1.0, opacity: 0.35, dash: '5,5', dist: 70, strength: 0.15 },
     };
     
     kgSimulation = d3.forceSimulation(nodes)
@@ -1697,7 +1686,6 @@ function renderKnowledgeGraph(container, nodes, links) {
     const legendItems = [
         { label: '章节归属', color: '#4ade80', dash: null },
         { label: '跨章关联', color: '#60a5fa', dash: '5,5' },
-        { label: '制造商', color: '#94a3b8', dash: null },
     ];
 
     legendItems.forEach(item => {
@@ -1712,9 +1700,6 @@ function renderKnowledgeGraph(container, nodes, links) {
 
 // 知识图谱标签页已移除，保留函数签名以防引用错误
 function initVizTabs() {}
-
-// ==================== 向量空间可视化 ====================
-
 
 // ==================== 向量空间可视化 ====================
 
