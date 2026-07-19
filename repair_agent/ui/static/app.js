@@ -125,8 +125,11 @@ function initTabs() {
             if (tabName === 'stats') {
                 refreshStats();
                 loadVectorSpace();
+            }
         });
     });
+}
+
 // ==================== 状态检查 ====================
 
 async function checkStatus() {
@@ -145,9 +148,13 @@ async function checkStatus() {
             elements.statusBar.className = 'status-bar status-loading';
             // 继续轮询
             setTimeout(checkStatus, 2000);
+        }
     } catch (e) {
         elements.statusBar.textContent = '❌ 连接失败';
         elements.statusBar.className = 'status-bar status-error';
+    }
+}
+
 // ==================== 故障诊断 ====================
 
 function initDiagnosis() {
@@ -161,6 +168,7 @@ function initDiagnosis() {
                 elements.imagePreview.classList.remove('hidden');
             };
             reader.readAsDataURL(file);
+        }
     });
 
     // 移除图片
@@ -184,7 +192,11 @@ function initDiagnosis() {
             e.preventDefault();
             if (!elements.btnDiagnose.disabled) {
                 startDiagnosis();
+            }
+        }
     });
+}
+
 async function startDiagnosis() {
     if (state.isDiagnosing) return;
 
@@ -192,6 +204,8 @@ async function startDiagnosis() {
     if (!description) {
         alert('请输入故障描述');
         return;
+    }
+
     state.isDiagnosing = true;
     state.analysisText = '';
     state.solutionText = '';
@@ -211,6 +225,8 @@ async function startDiagnosis() {
     formData.append('description', description);
     if (elements.faultImage.files[0]) {
         formData.append('image', elements.faultImage.files[0]);
+    }
+
     try {
         const response = await fetch('/api/diagnose', {
             method: 'POST',
@@ -220,6 +236,8 @@ async function startDiagnosis() {
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.error || '请求失败');
+        }
+
         // 使用 ReadableStream 处理 SSE
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -231,6 +249,7 @@ async function startDiagnosis() {
 
             buffer += decoder.decode(value, { stream: true });
             buffer = processSSEBuffer(buffer, handleSSEEvent);
+        }
         if (buffer.trim()) processSSEBuffer(buffer + '\n\n', handleSSEEvent);
     } catch (error) {
         appendToCot(`<div class="cot-step" style="color: #dc2626;">❌ 错误: ${error.message}</div>`);
@@ -238,6 +257,9 @@ async function startDiagnosis() {
         state.isDiagnosing = false;
         elements.btnDiagnose.disabled = false;
         elements.btnDiagnose.textContent = '🚀 开始诊断';
+    }
+}
+
 function processSSEBuffer(buffer, handler) {
     const events = buffer.split(/\r?\n\r?\n/);
     const remainder = events.pop() || '';
@@ -251,13 +273,17 @@ function processSSEBuffer(buffer, handler) {
                 eventType = line.substring(6).trim();
             } else if (line.startsWith('data:')) {
                 dataLines.push(line.substring(5).trimStart());
+            }
         });
 
         if (eventType && dataLines.length > 0) {
             handler(eventType, dataLines.join('\n'));
+        }
     });
 
     return remainder;
+}
+
 function handleSSEEvent(eventType, dataStr) {
     try {
         const data = JSON.parse(dataStr);
@@ -298,8 +324,12 @@ function handleSSEEvent(eventType, dataStr) {
             case 'error':
                 appendToCot(`<div class="cot-step" style="color: #dc2626;">❌ ${escapeHtml(data.message)}</div>`);
                 break;
+        }
     } catch (e) {
         console.error('解析 SSE 事件失败:', e, dataStr);
+    }
+}
+
 function handleNeo4j(data) {
     if (data.results && data.results.length > 0) {
         // 在推理过程中显示简要信息
@@ -334,6 +364,10 @@ function handleNeo4j(data) {
         const evidenceArea = document.getElementById('evidence-area');
         if (evidenceArea) {
             evidenceArea.innerHTML = html;
+        }
+    }
+}
+
 function handleRAG(data) {
     if (data.results && data.results.length > 0) {
         // 在推理过程中显示简要信息
@@ -342,7 +376,8 @@ function handleRAG(data) {
         // 在证据链区域显示详细信息
         let html = '<div class="evidence-chain">';
         data.results.forEach((r, i) => {
-            const sourceIcon = r.source === 'faa' ? 'airport' : r.source === 'maintnet' ? 'tools' : 'book';
+            const sourceIcon = r.source === 'faa' ? '✈️' : r.source === 'maintnet' ? '🔧' : '📖';
+            
             // 存储数据到全局变量以便点击时使用
             const evidenceData = {
                 title: `证据 #${i + 1}`,
@@ -379,6 +414,9 @@ function handleRAG(data) {
     } else {
         appendToCot('<div class="cot-step-sub">📚 知识库暂无匹配记录</div>');
         elements.evidenceArea.innerHTML = '<em class="placeholder">未找到相关证据</em>';
+    }
+}
+
 function handleAnalysis(data) {
     state.analysisText += data.chunk;
 
@@ -389,11 +427,15 @@ function handleAnalysis(data) {
         analysisDiv.id = 'cot-analysis';
         analysisDiv.innerHTML = '<div class="cot-step">🧠 LLM 分析</div><div class="cot-text"></div>';
         elements.cotArea.appendChild(analysisDiv);
+    }
+
     // 更新文本内容
     const textDiv = analysisDiv.querySelector('.cot-text');
     textDiv.textContent = state.analysisText;
 
     scrollToBottom();
+}
+
 function handleSolutionText(data) {
     state.solutionText += data.chunk;
 
@@ -404,11 +446,15 @@ function handleSolutionText(data) {
         solutionDiv.id = 'cot-solution';
         solutionDiv.innerHTML = '<div class="cot-step">🔧 方案推理</div><div class="cot-text"></div>';
         elements.cotArea.appendChild(solutionDiv);
+    }
+
     // 更新文本内容
     const textDiv = solutionDiv.querySelector('.cot-text');
     textDiv.textContent = state.solutionText;
 
     scrollToBottom();
+}
+
 function handleDiagnosis(data) {
     let html = '<div class="cot-step">📋 诊断结果</div>';
     html += `<div class="cot-text">故障类型: <strong>${escapeHtml(data.fault_type)}</strong></div>`;
@@ -417,6 +463,8 @@ function handleDiagnosis(data) {
 
     if (data.possible_causes && data.possible_causes.length > 0) {
         html += `<div class="cot-text">可能原因: ${data.possible_causes.map(c => escapeHtml(c)).join('、')}</div>`;
+    }
+
     appendToCot(html);
 
     // 在证据链区域显示诊断依据
@@ -464,6 +512,9 @@ function handleDiagnosis(data) {
         elements.evidenceArea.innerHTML = evidenceHtml;
     } else if (!elements.evidenceArea.querySelector('.evidence-item')) {
         elements.evidenceArea.innerHTML = '<em class="placeholder">未找到相关诊断依据</em>';
+    }
+}
+
 function handleSolution(data) {
     let html = `<div class="cot-step">🔧 维修方案（${data.repair_steps.length} 步）</div>`;
 
@@ -473,7 +524,11 @@ function handleSolution(data) {
 
     if (data.estimated_time) {
         html += `<div class="cot-text" style="margin-top: 8px;">⏱️ 预计 ${escapeHtml(data.estimated_time)} | 难度: ${escapeHtml(data.difficulty)}</div>`;
+    }
+
     appendToCot(html);
+}
+
 function handleResult(data) {
     if (data.success && data.work_order) {
         appendToCot('<div class="cot-step">✅ 诊断完成</div>');
@@ -483,9 +538,14 @@ function handleResult(data) {
         let html = `<div class="cot-step" style="color: #f59e0b;">⚠️ ${escapeHtml(data.error || '无法完成诊断')}</div>`;
         if (data.message) {
             html += `<div class="cot-text">${escapeHtml(data.message).replace(/\n/g, '<br>')}</div>`;
+        }
         if (data.suggestion) {
             html += `<div class="cot-text" style="color: #3b82f6; margin-top: 12px;">💡 ${escapeHtml(data.suggestion)}</div>`;
+        }
         appendToCot(html);
+    }
+}
+
 function renderWorkOrder(wo) {
     const info = wo.order_info || {};
     const diag = wo.diagnosis || {};
@@ -532,6 +592,8 @@ function renderWorkOrder(wo) {
 
     elements.orderArea.innerHTML = html;
     elements.orderArea.classList.remove('hidden');
+}
+
 // ==================== 知识检索 ====================
 
 function initSearch() {
@@ -540,6 +602,7 @@ function initSearch() {
         if (e.key === 'Enter') {
             e.preventDefault();
             searchKnowledge();
+        }
     });
 
     // 热门搜索标签
@@ -549,6 +612,8 @@ function initSearch() {
             searchKnowledge();
         });
     });
+}
+
 // 搜索状态
 const searchState = {
     currentQuery: '',
@@ -563,6 +628,8 @@ async function searchKnowledge(page = 1) {
     if (!query) {
         alert('请输入查询内容');
         return;
+    }
+
     // 更新搜索状态
     searchState.currentQuery = query;
     searchState.currentPage = page;
@@ -571,9 +638,13 @@ async function searchKnowledge(page = 1) {
     elements.btnSearch.textContent = '🔍 检索中...';
     if (page === 1) {
         elements.searchResults.innerHTML = '<div class="loading-placeholder"><span class="loading-icon">⏳</span><p>正在检索...</p></div>';
+    }
+
     // 添加到搜索历史
     if (page === 1) {
         addToSearchHistory(query);
+    }
+
     try {
         const response = await fetch('/api/search', {
             method: 'POST',
@@ -619,9 +690,10 @@ async function searchKnowledge(page = 1) {
                     if (kw) {
                         const regex = new RegExp(escapeRegex(kw), 'gi');
                         highlightedContent = highlightedContent.replace(regex, `<span class="keyword">${escapeHtml(kw)}</span>`);
+                    }
                 });
 
-                // 相似度等级样式
+                
                 // 计算全局序号
                 const globalIndex = (searchState.currentPage - 1) * searchState.pageSize + i + 1;
 
@@ -668,6 +740,8 @@ async function searchKnowledge(page = 1) {
                 // 上一页按钮
                 if (searchState.currentPage > 1) {
                     html += `<button class="pagination-btn" onclick="searchKnowledge(${searchState.currentPage - 1})">◀ 上一页</button>`;
+                }
+                
                 // 页码
                 const maxVisible = 5;
                 let startPage = Math.max(1, searchState.currentPage - Math.floor(maxVisible / 2));
@@ -675,18 +749,30 @@ async function searchKnowledge(page = 1) {
                 
                 if (endPage - startPage < maxVisible - 1) {
                     startPage = Math.max(1, endPage - maxVisible + 1);
+                }
+                
                 if (startPage > 1) {
                     html += `<button class="pagination-btn" onclick="searchKnowledge(1)">1</button>`;
                     if (startPage > 2) html += '<span class="pagination-info">...</span>';
+                }
+                
                 for (let i = startPage; i <= endPage; i++) {
                     html += `<button class="pagination-btn ${i === searchState.currentPage ? 'active' : ''}" onclick="searchKnowledge(${i})">${i}</button>`;
+                }
+                
                 if (endPage < searchState.totalPages) {
                     if (endPage < searchState.totalPages - 1) html += '<span class="pagination-info">...</span>';
                     html += `<button class="pagination-btn" onclick="searchKnowledge(${searchState.totalPages})">${searchState.totalPages}</button>`;
+                }
+                
                 // 下一页按钮
                 if (searchState.currentPage < searchState.totalPages) {
                     html += `<button class="pagination-btn" onclick="searchKnowledge(${searchState.currentPage + 1})">下一页 ▶</button>`;
+                }
+                
                 html += '</div>';
+            }
+            
             elements.searchResults.innerHTML = html;
         } else {
             elements.searchResults.innerHTML = `
@@ -695,11 +781,15 @@ async function searchKnowledge(page = 1) {
                     <p>未找到相关知识，请尝试其他关键词</p>
                 </div>
             `;
+        }
     } catch (e) {
         elements.searchResults.innerHTML = `<p style="color: #dc2626;">❌ 检索失败: ${e.message}</p>`;
     } finally {
         elements.btnSearch.disabled = false;
         elements.btnSearch.textContent = '🔍 检索';
+    }
+}
+
 // 搜索历史管理
 function addToSearchHistory(query) {
     // 去重
@@ -708,30 +798,42 @@ function addToSearchHistory(query) {
     // 最多保留10条
     if (state.searchHistory.length > 10) {
         state.searchHistory = state.searchHistory.slice(0, 10);
+    }
     saveSearchHistory();
     renderSearchHistory();
+}
+
 function saveSearchHistory() {
     try {
         localStorage.setItem('searchHistory', JSON.stringify(state.searchHistory));
     } catch (e) {}
+}
+
 function loadSearchHistory() {
     try {
         const saved = localStorage.getItem('searchHistory');
         if (saved) {
             state.searchHistory = JSON.parse(saved);
+        }
     } catch (e) {}
     renderSearchHistory();
+}
+
 function renderSearchHistory() {
     if (!elements.searchHistoryList) return;
 
     if (state.searchHistory.length === 0) {
         elements.searchHistoryList.innerHTML = '<p class="empty-hint">暂无检索记录</p>';
         return;
+    }
+
     let html = '';
     state.searchHistory.forEach(query => {
         html += `<div class="history-item" onclick="document.getElementById('search-query').value='${escapeHtml(query)}'; searchKnowledge();">📋 ${escapeHtml(query)}</div>`;
     });
     elements.searchHistoryList.innerHTML = html;
+}
+
 // ==================== 案例管理 ====================
 
 // 案例管理状态
@@ -746,9 +848,13 @@ function initCase() {
     // 维修案例添加按钮
     if (elements.btnAddRepair) {
         elements.btnAddRepair.addEventListener('click', addRepairCase);
+    }
+    
     // 维护案例添加按钮
     if (elements.btnAddMaint) {
         elements.btnAddMaint.addEventListener('click', addMaintenanceCase);
+    }
+
     // 案例类型切换
     document.querySelectorAll('input[name="case-type"]').forEach(radio => {
         radio.addEventListener('change', (e) => {
@@ -785,6 +891,8 @@ function initCase() {
             loadCases();
         });
     });
+}
+
 function toggleCaseForm(caseType) {
     const repairForm = document.getElementById('repair-form');
     const maintenanceForm = document.getElementById('maintenance-form');
@@ -795,6 +903,9 @@ function toggleCaseForm(caseType) {
     } else {
         repairForm.classList.add('hidden');
         maintenanceForm.classList.remove('hidden');
+    }
+}
+
 function applyRepairTemplate(type) {
     const templates = {
         aircraft: {
@@ -836,6 +947,7 @@ function applyRepairTemplate(type) {
             parts_used: '',
             technician: '',
             notes: ''
+        }
     };
 
     const template = templates[type];
@@ -848,6 +960,9 @@ function applyRepairTemplate(type) {
         document.getElementById('repair-parts').value = template.parts_used || '';
         document.getElementById('repair-technician').value = template.technician || '';
         document.getElementById('repair-notes').value = template.notes || '';
+    }
+}
+
 function applyMaintenanceTemplate(type) {
     const templates = {
         'oil-change': {
@@ -893,6 +1008,7 @@ function applyMaintenanceTemplate(type) {
             parts_used: '',
             technician: '',
             notes: ''
+        }
     };
 
     const template = templates[type];
@@ -906,11 +1022,16 @@ function applyMaintenanceTemplate(type) {
         document.getElementById('maint-parts').value = template.parts_used || '';
         document.getElementById('maint-technician').value = template.technician || '';
         document.getElementById('maint-notes').value = template.notes || '';
+    }
+}
+
 async function addRepairCase() {
     const title = document.getElementById('repair-title').value.trim();
     if (!title) {
         alert('请输入案例标题');
         return;
+    }
+
     const caseData = {
         case_type: 'repair',
         title: title,
@@ -958,17 +1079,23 @@ async function addRepairCase() {
         } else {
             result.textContent = `❌ ${data.message || data.error}`;
             result.className = 'result-message error';
+        }
     } catch (e) {
         result.textContent = `❌ 添加失败: ${e.message}`;
         result.className = 'result-message error';
     } finally {
         btn.disabled = false;
         btn.textContent = '➕ 添加维修案例';
+    }
+}
+
 async function addMaintenanceCase() {
     const title = document.getElementById('maint-title').value.trim();
     if (!title) {
         alert('请输入案例标题');
         return;
+    }
+
     const caseData = {
         case_type: 'maintenance',
         title: title,
@@ -1018,12 +1145,16 @@ async function addMaintenanceCase() {
         } else {
             result.textContent = `❌ ${data.message || data.error}`;
             result.className = 'result-message error';
+        }
     } catch (e) {
         result.textContent = `❌ 添加失败: ${e.message}`;
         result.className = 'result-message error';
     } finally {
         btn.disabled = false;
         btn.textContent = '➕ 添加维护案例';
+    }
+}
+
 async function loadCases() {
     if (!elements.caseList) return;
 
@@ -1033,6 +1164,8 @@ async function loadCases() {
         let url = `/api/cases?page=${caseState.currentPage}&page_size=${caseState.pageSize}`;
         if (caseState.currentFilter !== 'all') {
             url += `&case_type=${caseState.currentFilter}`;
+        }
+
         const response = await fetch(url);
         const data = await response.json();
 
@@ -1068,6 +1201,8 @@ async function loadCases() {
                         ${maintenanceCycle ? `<div class="case-item-field"><strong>🔄 维护周期:</strong> ${escapeHtml(maintenanceCycle)}</div>` : ''}
                         ${maintenanceStandard ? `<div class="case-item-field"><strong>📐 维护标准:</strong> ${escapeHtml(maintenanceStandard)}</div>` : ''}
                     `;
+                }
+
                 html += `
                     <div class="case-item ${typeClass} clickable-item" data-id="${c.id}" onclick="showCaseDetail(${JSON.stringify(c).replace(/"/g, '&quot;')})">
                         <div class="case-item-header">
@@ -1102,13 +1237,19 @@ async function loadCases() {
                 </div>
             `;
             document.getElementById('case-pagination').innerHTML = '';
+        }
     } catch (e) {
         elements.caseList.innerHTML = `<div class="loading-placeholder"><p style="color: #dc2626;">❌ 加载失败: ${e.message}</p></div>`;
+    }
+}
+
 function renderPagination(total, currentPage, totalPages) {
     const paginationEl = document.getElementById('case-pagination');
     if (!paginationEl || totalPages <= 1) {
         if (paginationEl) paginationEl.innerHTML = '';
         return;
+    }
+
     let html = '';
     html += `<button class="pagination-btn" onclick="goToPage(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>◀ 上一页</button>`;
 
@@ -1119,21 +1260,33 @@ function renderPagination(total, currentPage, totalPages) {
 
     if (endPage - startPage < maxVisible - 1) {
         startPage = Math.max(1, endPage - maxVisible + 1);
+    }
+
     if (startPage > 1) {
         html += `<button class="pagination-btn" onclick="goToPage(1)">1</button>`;
         if (startPage > 2) html += `<span class="pagination-info">...</span>`;
+    }
+
     for (let i = startPage; i <= endPage; i++) {
         html += `<button class="pagination-btn ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+    }
+
     if (endPage < totalPages) {
         if (endPage < totalPages - 1) html += `<span class="pagination-info">...</span>`;
         html += `<button class="pagination-btn" onclick="goToPage(${totalPages})">${totalPages}</button>`;
+    }
+
     html += `<button class="pagination-btn" onclick="goToPage(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>下一页 ▶</button>`;
     html += `<span class="pagination-info">共 ${total} 条</span>`;
 
     paginationEl.innerHTML = html;
+}
+
 function goToPage(page) {
     caseState.currentPage = page;
     loadCases();
+}
+
 function confirmDeleteCase(caseId, caseTitle) {
     // 创建确认对话框
     const overlay = document.createElement('div');
@@ -1154,6 +1307,8 @@ function confirmDeleteCase(caseId, caseTitle) {
     overlay.addEventListener('click', (e) => {
         if (e.target === overlay) overlay.remove();
     });
+}
+
 async function deleteCase(caseId) {
     try {
         const response = await fetch(`/api/case/${caseId}`, {
@@ -1167,8 +1322,12 @@ async function deleteCase(caseId) {
             loadCases();
         } else {
             alert(`删除失败: ${data.error || '未知错误'}`);
+        }
     } catch (e) {
         alert(`删除失败: ${e.message}`);
+    }
+}
+
 // ==================== 系统统计 ====================
 
 function initStats() {
@@ -1179,8 +1338,12 @@ function initStats() {
     const btnRefreshDataStats = document.getElementById('btn-refresh-data-stats');
     if (btnRefreshDataStats) {
         btnRefreshDataStats.addEventListener('click', loadDataStats);
+    }
+    
     // 初始加载数据统计
     loadDataStats();
+}
+
 async function refreshStats() {
     elements.btnRefreshStats.disabled = true;
     elements.btnRefreshStats.textContent = '🔄 加载中...';
@@ -1206,12 +1369,16 @@ async function refreshStats() {
                 if (kbMatch) kbCount = kbMatch[1];
             } else {
                 kbCount = kbStats.total_documents || kbStats.count || '--';
+            }
+            
             if (typeof memStats === 'string') {
                 // 从 "总记忆数: 0" 中提取数字
                 const memMatch = memStats.match(/总记忆数:\s*(\d+)/);
                 if (memMatch) memCount = memMatch[1];
             } else {
                 memCount = memStats.total_memories || memStats.count || '--';
+            }
+
             elements.statKbCount.textContent = kbCount;
             elements.statMemoryCount.textContent = memCount;
 
@@ -1228,8 +1395,11 @@ async function refreshStats() {
                         h.content && !h.content.includes('未找到')
                     );
                     elements.statDiagnosisCount.textContent = validHistory.length;
+                }
             } catch (histErr) {
                 console.error('获取诊断历史失败:', histErr);
+            }
+
             // 组件状态
             const components = stats.components || [];
             let compHtml = '';
@@ -1247,11 +1417,14 @@ async function refreshStats() {
             elements.componentsList.innerHTML = compHtml;
         } else {
             console.error('获取统计失败:', data.error);
+        }
     } catch (e) {
         console.error('获取统计失败:', e);
     } finally {
         elements.btnRefreshStats.disabled = false;
         elements.btnRefreshStats.textContent = '🔄 刷新数据';
+    }
+
     // 同时获取诊断历史
     try {
         const historyResponse = await fetch('/api/history');
@@ -1259,8 +1432,12 @@ async function refreshStats() {
 
         if (historyData.success) {
             elements.statDiagnosisCount.textContent = historyData.history?.length || 0;
+        }
     } catch (e) {
         console.error('获取诊断历史失败:', e);
+    }
+}
+
 // ==================== 可视化功能 ====================
 
 // 切换可视化部分的展开/折叠
@@ -1276,9 +1453,14 @@ function toggleVizSection(section) {
         if (section === 'vector-space' && !content.dataset.loaded) {
             loadVectorSpace();
             content.dataset.loaded = 'true';
+        }
     } else {
         content.style.display = 'none';
         toggle.classList.remove('expanded');
+    }
+}
+
+
 // ==================== 向量空间可视化 ====================
 
 async function loadVectorSpace() {
@@ -1294,6 +1476,8 @@ async function loadVectorSpace() {
         if (!result.success || !result.data.points.length) {
             container.innerHTML = '<div class="viz-empty"><div class="viz-empty-icon">📭</div><div class="viz-empty-text">暂无向量数据，请先运行 import_dataset.py</div></div>';
             return;
+        }
+        
         const { points, stats } = result.data;
         
         // 显示统计信息
@@ -1301,6 +1485,7 @@ async function loadVectorSpace() {
         if (stats.collections && stats.collections.length > 0) {
             statsHtml += '<br><strong>Qdrant 集合:</strong> ';
             statsHtml += stats.collections.map(c => `${c.name}: ${c.points} points`).join(' | ');
+        }
         statsDiv.innerHTML = statsHtml;
         
         // 渲染散点图
@@ -1308,6 +1493,9 @@ async function loadVectorSpace() {
         
     } catch (error) {
         container.innerHTML = `<div class="viz-empty"><div class="viz-empty-icon">❌</div><div class="viz-empty-text">加载失败: ${error.message}</div></div>`;
+    }
+}
+
 function renderVectorSpace(container, points, stats) {
     // 清空容器
     container.innerHTML = '';
@@ -1450,6 +1638,8 @@ function renderVectorSpace(container, points, stats) {
             .attr('stroke', '#e2e8f0')
             .attr('stroke-dasharray', '2,2');
         yGrid.select('.domain').remove();
+    }
+    
     // 初始化坐标轴
     updateAxes(d3.zoomIdentity);
     
@@ -1498,6 +1688,8 @@ function renderVectorSpace(container, points, stats) {
             const count = points.filter(p => p.label === d).length;
             return `${d} (${count})`;
         });
+}
+
 // ==================== 工具函数 ====================
 
 function formatStatsText(text) {
@@ -1509,6 +1701,8 @@ function formatStatsText(text) {
         if (text.summary) text = text.summary;
         else if (text.description) text = text.description;
         else text = JSON.stringify(text, null, 2);
+    }
+    
     // 确保是字符串
     text = String(text);
     
@@ -1529,22 +1723,32 @@ function formatStatsText(text) {
     html = html.replace(/([\u{1F300}-\u{1F9FF}]):\s*/gu, '$1 ');
     
     return html;
+}
+
 function appendToCot(html) {
     const div = document.createElement('div');
     div.innerHTML = html;
     elements.cotArea.appendChild(div);
     scrollToBottom();
+}
+
 function scrollToBottom() {
     requestAnimationFrame(() => {
         elements.cotArea.scrollTop = elements.cotArea.scrollHeight;
     });
+}
+
 function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
     div.textContent = String(text);
     return div.innerHTML;
+}
+
 function escapeRegex(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // ==================== 日常维护 ====================
 
 const maintenanceState = {
@@ -1565,7 +1769,10 @@ function initMaintenance() {
                     elements.maintImagePreview.classList.remove('hidden');
                 };
                 reader.readAsDataURL(file);
+            }
         });
+    }
+
     // 移除图片
     if (elements.maintRemoveImage) {
         elements.maintRemoveImage.addEventListener('click', () => {
@@ -1573,9 +1780,13 @@ function initMaintenance() {
             elements.maintImagePreview.classList.add('hidden');
             elements.maintPreviewImg.src = '';
         });
+    }
+
     // 维护按钮
     if (elements.btnMaintenance) {
         elements.btnMaintenance.addEventListener('click', startMaintenance);
+    }
+
     // 输入框变化时启用按钮
     if (elements.maintDesc) {
         elements.maintDesc.addEventListener('input', () => {
@@ -1588,7 +1799,12 @@ function initMaintenance() {
                 e.preventDefault();
                 if (!elements.btnMaintenance.disabled) {
                     startMaintenance();
+                }
+            }
         });
+    }
+}
+
 async function startMaintenance() {
     if (maintenanceState.isProcessing) return;
 
@@ -1596,6 +1812,8 @@ async function startMaintenance() {
     if (!description) {
         alert('请输入维护需求描述');
         return;
+    }
+
     maintenanceState.isProcessing = true;
     maintenanceState.analysisText = '';
     maintenanceState.solutionText = '';
@@ -1615,6 +1833,8 @@ async function startMaintenance() {
     formData.append('mode', 'maintenance');  // 关键：指定维护模式
     if (elements.maintImage.files[0]) {
         formData.append('image', elements.maintImage.files[0]);
+    }
+
     try {
         const response = await fetch('/api/diagnose', {
             method: 'POST',
@@ -1624,6 +1844,8 @@ async function startMaintenance() {
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.error || '请求失败');
+        }
+
         // 使用 ReadableStream 处理 SSE
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -1635,6 +1857,7 @@ async function startMaintenance() {
 
             buffer += decoder.decode(value, { stream: true });
             buffer = processSSEBuffer(buffer, handleMaintenanceSSEEvent);
+        }
         if (buffer.trim()) processSSEBuffer(buffer + '\n\n', handleMaintenanceSSEEvent);
     } catch (error) {
         appendToMaintCot(`<div class="cot-step" style="color: #dc2626;">❌ 错误: ${error.message}</div>`);
@@ -1642,6 +1865,9 @@ async function startMaintenance() {
         maintenanceState.isProcessing = false;
         elements.btnMaintenance.disabled = false;
         elements.btnMaintenance.textContent = '🔧 生成维护方案';
+    }
+}
+
 function handleMaintenanceSSEEvent(eventType, dataStr) {
     try {
         const data = JSON.parse(dataStr);
@@ -1682,8 +1908,12 @@ function handleMaintenanceSSEEvent(eventType, dataStr) {
             case 'error':
                 appendToMaintCot(`<div class="cot-step" style="color: #dc2626;">❌ ${escapeHtml(data.message)}</div>`);
                 break;
+        }
     } catch (e) {
         console.error('解析 SSE 事件失败:', e, dataStr);
+    }
+}
+
 function handleMaintenanceNeo4j(data) {
     if (data.results && data.results.length > 0) {
         appendToMaintCot(`<div class="cot-step-sub">🗄️ 从知识图谱找到 ${data.total} 条相关信息</div>`);
@@ -1703,6 +1933,9 @@ function handleMaintenanceNeo4j(data) {
         });
         html += '</div>';
         elements.maintEvidenceArea.innerHTML = html;
+    }
+}
+
 function handleMaintenanceRAG(data) {
     if (data.results && data.results.length > 0) {
         appendToMaintCot(`<div class="cot-step-sub">📚 检索到 ${data.total} 条相关维护记录</div>`);
@@ -1713,6 +1946,7 @@ function handleMaintenanceRAG(data) {
         let html = '<div class="evidence-chain">';
         data.results.forEach((r, i) => {
             const sourceIcon = r.source === 'faa' ? '✈️' : r.source === 'maintnet' ? '🔧' : r.source === 'user_case' ? '📝' : '📖';
+            
             // 存储数据
             const evidenceData = {
                 title: `维护依据 #${i + 1}`,
@@ -1744,6 +1978,9 @@ function handleMaintenanceRAG(data) {
         });
         html += '</div>';
         elements.maintEvidenceArea.innerHTML = html;
+    }
+}
+
 function handleMaintenanceAnalysis(data) {
     maintenanceState.analysisText += data.chunk;
     
@@ -1753,9 +1990,13 @@ function handleMaintenanceAnalysis(data) {
         analysisDiv.id = 'maint-analysis';
         analysisDiv.innerHTML = '<div class="cot-step">🧠 需求分析</div><div class="cot-text"></div>';
         elements.maintCotArea.appendChild(analysisDiv);
+    }
+    
     const textDiv = analysisDiv.querySelector('.cot-text');
     textDiv.textContent = maintenanceState.analysisText;
     scrollToMaintBottom();
+}
+
 function handleMaintenanceSolutionText(data) {
     maintenanceState.solutionText += data.chunk;
     
@@ -1765,9 +2006,13 @@ function handleMaintenanceSolutionText(data) {
         solutionDiv.id = 'maint-solution';
         solutionDiv.innerHTML = '<div class="cot-step">🔧 维护方案</div><div class="cot-text"></div>';
         elements.maintCotArea.appendChild(solutionDiv);
+    }
+    
     const textDiv = solutionDiv.querySelector('.cot-text');
     textDiv.textContent = maintenanceState.solutionText;
     scrollToMaintBottom();
+}
+
 function handleMaintenanceDiagnosis(data) {
     let html = '<div class="cot-step">📋 维护分析结果</div>';
     html += `<div class="cot-text">维护类型: <strong>${escapeHtml(data.fault_type)}</strong></div>`;
@@ -1776,6 +2021,8 @@ function handleMaintenanceDiagnosis(data) {
     
     if (data.possible_causes && data.possible_causes.length > 0) {
         html += `<div class="cot-text">维护要点: ${data.possible_causes.map(c => escapeHtml(c)).join('、')}</div>`;
+    }
+    
     appendToMaintCot(html);
     
     // 显示维护依据
@@ -1799,6 +2046,9 @@ function handleMaintenanceDiagnosis(data) {
         elements.maintEvidenceArea.innerHTML = evidenceHtml;
     } else if (!elements.maintEvidenceArea.querySelector('.evidence-item')) {
         elements.maintEvidenceArea.innerHTML = '<em class="placeholder">未找到相关维护依据</em>';
+    }
+}
+
 function handleMaintenanceSolution(data) {
     let html = `<div class="cot-step">🔧 维护步骤（${data.repair_steps.length} 步）</div>`;
     
@@ -1808,7 +2058,11 @@ function handleMaintenanceSolution(data) {
     
     if (data.estimated_time) {
         html += `<div class="cot-text" style="margin-top: 8px;">⏱️ 预计 ${escapeHtml(data.estimated_time)} | 难度: ${escapeHtml(data.difficulty)}</div>`;
+    }
+    
     appendToMaintCot(html);
+}
+
 function handleMaintenanceResult(data) {
     if (data.success && data.work_order) {
         appendToMaintCot('<div class="cot-step">✅ 维护方案生成完成</div>');
@@ -1817,7 +2071,11 @@ function handleMaintenanceResult(data) {
         let html = `<div class="cot-step" style="color: #f59e0b;">⚠️ ${escapeHtml(data.error || '无法生成维护方案')}</div>`;
         if (data.message) {
             html += `<div class="cot-text">${escapeHtml(data.message).replace(/\n/g, '<br>')}</div>`;
+        }
         appendToMaintCot(html);
+    }
+}
+
 function renderMaintenanceWorkOrder(order) {
     const orderInfo = order.order_info || {};
     const maintenance = order.maintenance || order.diagnosis || {};
@@ -1858,6 +2116,8 @@ function renderMaintenanceWorkOrder(order) {
             html += `<div class="order-step"><span class="step-num">${s.step}</span> ${escapeHtml(s.action)}</div>`;
         });
         html += '</div></div>';
+    }
+    
     // 备件/材料
     const parts = solution.parts_required || [];
     if (parts.length > 0) {
@@ -1870,6 +2130,8 @@ function renderMaintenanceWorkOrder(order) {
             html += `<div class="order-part">• ${escapeHtml(p.name)} ${p.quantity ? '×' + p.quantity : ''} ${p.specification ? '(' + escapeHtml(p.specification) + ')' : ''}</div>`;
         });
         html += '</div></div>';
+    }
+    
     // 工具
     const tools = solution.tools_required || [];
     if (tools.length > 0) {
@@ -1879,6 +2141,8 @@ function renderMaintenanceWorkOrder(order) {
                 <div class="order-tools">${tools.map(t => escapeHtml(t)).join('、')}</div>
             </div>
         `;
+    }
+    
     // 安全提示
     const warnings = solution.safety_warnings || [];
     if (warnings.length > 0) {
@@ -1891,6 +2155,8 @@ function renderMaintenanceWorkOrder(order) {
             html += `<div class="order-warning">⚠️ ${escapeHtml(w)}</div>`;
         });
         html += '</div></div>';
+    }
+    
     // 预计时间和难度
     html += `
         <div class="order-section">
@@ -1902,15 +2168,21 @@ function renderMaintenanceWorkOrder(order) {
     
     elements.maintOrderArea.innerHTML = html;
     elements.maintOrderArea.classList.remove('hidden');
+}
+
 function appendToMaintCot(html) {
     const div = document.createElement('div');
     div.innerHTML = html;
     elements.maintCotArea.appendChild(div);
     scrollToMaintBottom();
+}
+
 function scrollToMaintBottom() {
     requestAnimationFrame(() => {
         elements.maintCotArea.scrollTop = elements.maintCotArea.scrollHeight;
     });
+}
+
 // ==================== 智能问答 ====================
 
 const qaState = {
@@ -1921,6 +2193,8 @@ function initQA() {
     // 提问按钮
     if (elements.btnAsk) {
         elements.btnAsk.addEventListener('click', askQuestion);
+    }
+
     // 输入框
     if (elements.qaQuestion) {
         elements.qaQuestion.addEventListener('input', () => {
@@ -1933,7 +2207,11 @@ function initQA() {
                 e.preventDefault();
                 if (!elements.btnAsk.disabled) {
                     askQuestion();
+                }
+            }
         });
+    }
+
     // 示例问题点击
     document.querySelectorAll('.qa-example').forEach(example => {
         example.addEventListener('click', () => {
@@ -1942,6 +2220,8 @@ function initQA() {
             askQuestion();
         });
     });
+}
+
 async function askQuestion() {
     if (qaState.isProcessing) return;
 
@@ -1949,6 +2229,8 @@ async function askQuestion() {
     if (!question) {
         alert('请输入问题');
         return;
+    }
+
     qaState.isProcessing = true;
     qaState.answerText = '';
     elements.btnAsk.disabled = true;
@@ -1965,6 +2247,8 @@ async function askQuestion() {
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.error || '请求失败');
+        }
+
         // 使用 ReadableStream 处理 SSE
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -1992,12 +2276,19 @@ async function askQuestion() {
                         handleQASSEEvent(eventType, eventData);
                         eventType = '';
                         eventData = '';
+                    }
+                }
+            }
+        }
     } catch (e) {
         elements.qaAnswer.innerHTML = `<div class="qa-error">❌ 请求失败: ${e.message}</div>`;
     } finally {
         qaState.isProcessing = false;
         elements.btnAsk.disabled = false;
         elements.btnAsk.textContent = '💡 提问';
+    }
+}
+
 function handleQASSEEvent(eventType, dataStr) {
     try {
         const data = JSON.parse(dataStr);
@@ -2012,6 +2303,7 @@ function handleQASSEEvent(eventType, dataStr) {
                     stepDiv.className = 'qa-steps';
                     elements.qaAnswer.innerHTML = '';
                     elements.qaAnswer.appendChild(stepDiv);
+                }
                 stepDiv.innerHTML += `<div class="qa-step">${escapeHtml(data.text)}</div>`;
                 break;
 
@@ -2023,10 +2315,14 @@ function handleQASSEEvent(eventType, dataStr) {
                     keywordsDiv.id = 'qa-keywords';
                     keywordsDiv.className = 'qa-section';
                     elements.qaAnswer.appendChild(keywordsDiv);
+                }
+                
                 const keywords = Array.isArray(data.keywords) ? data.keywords : [];
                 let keywordsHtml = '<h3>🔑 关键词解析</h3>';
                 if (keywords.length === 0) {
                     keywordsHtml += '<div class="qa-empty">未解析到关键词，请尝试补充更具体的问题描述。</div>';
+                }
+
                 keywords.forEach((kw, i) => {
                     const keyword = kw.keyword || kw.word || '';
                     keywordsHtml += `
@@ -2059,6 +2355,8 @@ function handleQASSEEvent(eventType, dataStr) {
                     answerDiv.id = 'qa-answer-content';
                     answerDiv.className = 'qa-answer-content';
                     answerSection.appendChild(answerDiv);
+                }
+                
                 answerDiv.textContent = qaState.answerText;
                 // 滚动到底部
                 elements.qaAnswer.scrollTop = elements.qaAnswer.scrollHeight;
@@ -2075,16 +2373,24 @@ function handleQASSEEvent(eventType, dataStr) {
             case 'error':
                 elements.qaAnswer.innerHTML = `<div class="qa-error">❌ ${escapeHtml(data.message)}</div>`;
                 break;
+        }
     } catch (e) {
         console.error('解析 QA SSE 事件失败:', e, dataStr);
+    }
+}
+
 // ==================== 系统反馈 ====================
 
 function initFeedback() {
     // 提交反馈按钮
     if (elements.btnSubmitFeedback) {
         elements.btnSubmitFeedback.addEventListener('click', submitFeedback);
+    }
+
     // 加载反馈历史
     loadFeedbacks();
+}
+
 async function submitFeedback() {
     const feedbackType = elements.feedbackType.value;
     const context = elements.feedbackContext.value.trim();
@@ -2095,6 +2401,8 @@ async function submitFeedback() {
     if (!issueDescription) {
         alert('请描述问题');
         return;
+    }
+
     elements.btnSubmitFeedback.disabled = true;
     elements.btnSubmitFeedback.textContent = '📤 提交中...';
     elements.feedbackResult.textContent = '';
@@ -2130,12 +2438,16 @@ async function submitFeedback() {
         } else {
             elements.feedbackResult.textContent = `❌ ${data.error || '提交失败'}`;
             elements.feedbackResult.className = 'result-message error';
+        }
     } catch (e) {
         elements.feedbackResult.textContent = `❌ 提交失败: ${e.message}`;
         elements.feedbackResult.className = 'result-message error';
     } finally {
         elements.btnSubmitFeedback.disabled = false;
         elements.btnSubmitFeedback.textContent = '📤 提交反馈';
+    }
+}
+
 async function loadFeedbacks() {
     if (!elements.feedbackList) return;
 
@@ -2174,8 +2486,12 @@ async function loadFeedbacks() {
                     <p>暂无反馈记录</p>
                 </div>
             `;
+        }
     } catch (e) {
         console.error('加载反馈失败:', e);
+    }
+}
+
 async function deleteFeedback(feedbackId) {
     if (!confirm('确定要删除这条反馈吗？')) return;
 
@@ -2190,25 +2506,37 @@ async function deleteFeedback(feedbackId) {
             loadFeedbacks();
         } else {
             alert(`删除失败: ${data.error || '未知错误'}`);
+        }
     } catch (e) {
         alert(`删除失败: ${e.message}`);
+    }
+}
+
 // ==================== 详情模态框 ====================
 
 function initDetailModal() {
     // 关闭按钮
     if (elements.modalClose) {
         elements.modalClose.addEventListener('click', closeDetailModal);
+    }
+    
     // 点击遮罩关闭
     if (elements.detailModal) {
         elements.detailModal.addEventListener('click', (e) => {
             if (e.target === elements.detailModal) {
                 closeDetailModal();
+            }
         });
+    }
+    
     // ESC 键关闭
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             closeDetailModal();
+        }
     });
+}
+
 function openDetailModal(title, content) {
     if (!elements.detailModal) return;
     
@@ -2216,11 +2544,15 @@ function openDetailModal(title, content) {
     elements.modalContent.innerHTML = content;
     elements.detailModal.classList.remove('hidden');
     document.body.style.overflow = 'hidden'; // 防止背景滚动
+}
+
 function closeDetailModal() {
     if (!elements.detailModal) return;
     
     elements.detailModal.classList.add('hidden');
     document.body.style.overflow = ''; // 恢复滚动
+}
+
 // 证据项点击展开详情
 function showEvidenceDetail(data) {
     const title = data.title || '详情';
@@ -2229,48 +2561,89 @@ function showEvidenceDetail(data) {
     // 来源信息
     if (data.source) {
         html += `
-            <div class="detail-section">                <div class="detail-value">${escapeHtml(data.source)}</div>
+            <div class="detail-section">
+                <div class="detail-label">来源</div>
+                <div class="detail-value">${escapeHtml(data.source)}</div>
             </div>
         `;
+    }
+    
+    // 相关度
+    if (data.relevance) {
+        html += `
+            <div class="detail-section">
+                <div class="detail-label">相关度</div>
+                <div class="detail-value">
+                </div>
+            </div>
+        `;
+    }
+    
     // 设备型号
     if (data.aircraftModel) {
         html += `
-            <div class="detail-section">                <div class="detail-value">${escapeHtml(data.aircraftModel)}</div>
+            <div class="detail-section">
+                <div class="detail-label">设备型号</div>
+                <div class="detail-value">${escapeHtml(data.aircraftModel)}</div>
             </div>
         `;
+    }
+    
     // 记录ID
     if (data.recordId) {
         html += `
-            <div class="detail-section">                <div class="detail-value">${escapeHtml(data.recordId)}</div>
+            <div class="detail-section">
+                <div class="detail-label">记录ID</div>
+                <div class="detail-value">${escapeHtml(data.recordId)}</div>
             </div>
         `;
+    }
+    
     // 内容
     if (data.content) {
         html += `
-            <div class="detail-section">                <div class="detail-value large">${escapeHtml(data.content).replace(/\n/g, '<br>')}</div>
+            <div class="detail-section">
+                <div class="detail-label">内容</div>
+                <div class="detail-value large">${escapeHtml(data.content).replace(/\n/g, '<br>')}</div>
             </div>
         `;
+    }
+    
     // 故障现象 / 维护类型
     if (data.description) {
         const descLabel = data.case_type === 'maintenance' ? '维护类型' : '故障现象';
         html += `
-            <div class="detail-section">                <div class="detail-value">${escapeHtml(data.description)}</div>
+            <div class="detail-section">
+                <div class="detail-label">${descLabel}</div>
+                <div class="detail-value">${escapeHtml(data.description)}</div>
             </div>
         `;
+    }
+    
     // 故障原因 / 维护周期
     if (data.problem) {
         const problemLabel = data.case_type === 'maintenance' ? '维护周期' : '故障原因';
         html += `
-            <div class="detail-section">                <div class="detail-value">${escapeHtml(data.problem)}</div>
+            <div class="detail-section">
+                <div class="detail-label">${problemLabel}</div>
+                <div class="detail-value">${escapeHtml(data.problem)}</div>
             </div>
         `;
+    }
+    
     // 解决方案
     if (data.action) {
         html += `
-            <div class="detail-section">                <div class="detail-value">${escapeHtml(data.action).replace(/\n/g, '<br>')}</div>
+            <div class="detail-section">
+                <div class="detail-label">解决方案</div>
+                <div class="detail-value">${escapeHtml(data.action).replace(/\n/g, '<br>')}</div>
             </div>
         `;
+    }
+    
     openDetailModal(title, html);
+}
+
 // 案例项点击展开详情
 function showCaseDetail(caseData) {
     const title = caseData.title || '案例详情';
@@ -2280,76 +2653,123 @@ function showCaseDetail(caseData) {
     const caseType = caseData.case_type || 'repair';
     const typeLabel = caseType === 'repair' ? '🔧 维修案例' : '🛠️ 维护案例';
     html += `
-        <div class="detail-section">            <div class="detail-value">${typeLabel}</div>
+        <div class="detail-section">
+            <div class="detail-label">案例类型</div>
+            <div class="detail-value">${typeLabel}</div>
         </div>
     `;
     
     // 设备类型
     if (caseData.device_type) {
         html += `
-            <div class="detail-section">                <div class="detail-value">${escapeHtml(caseData.device_type)}</div>
+            <div class="detail-section">
+                <div class="detail-label">设备类型</div>
+                <div class="detail-value">${escapeHtml(caseData.device_type)}</div>
             </div>
         `;
+    }
+    
     // 维修专用字段
     if (caseType === 'repair') {
         if (caseData.fault_symptom) {
             html += `
-                <div class="detail-section">                    <div class="detail-value">${escapeHtml(caseData.fault_symptom)}</div>
+                <div class="detail-section">
+                    <div class="detail-label">故障现象</div>
+                    <div class="detail-value">${escapeHtml(caseData.fault_symptom)}</div>
                 </div>
             `;
+        }
         if (caseData.fault_cause) {
             html += `
-                <div class="detail-section">                    <div class="detail-value">${escapeHtml(caseData.fault_cause)}</div>
+                <div class="detail-section">
+                    <div class="detail-label">故障原因</div>
+                    <div class="detail-value">${escapeHtml(caseData.fault_cause)}</div>
                 </div>
             `;
+        }
+    }
+    
     // 维护专用字段
     if (caseType === 'maintenance') {
         if (caseData.maintenance_type) {
             html += `
-                <div class="detail-section">                    <div class="detail-value">${escapeHtml(caseData.maintenance_type)}</div>
+                <div class="detail-section">
+                    <div class="detail-label">维护类型</div>
+                    <div class="detail-value">${escapeHtml(caseData.maintenance_type)}</div>
                 </div>
             `;
+        }
         if (caseData.maintenance_cycle) {
             html += `
-                <div class="detail-section">                    <div class="detail-value">${escapeHtml(caseData.maintenance_cycle)}</div>
+                <div class="detail-section">
+                    <div class="detail-label">维护周期</div>
+                    <div class="detail-value">${escapeHtml(caseData.maintenance_cycle)}</div>
                 </div>
             `;
+        }
         if (caseData.maintenance_standard) {
             html += `
-                <div class="detail-section">                    <div class="detail-value">${escapeHtml(caseData.maintenance_standard)}</div>
+                <div class="detail-section">
+                    <div class="detail-label">维护标准</div>
+                    <div class="detail-value">${escapeHtml(caseData.maintenance_standard)}</div>
                 </div>
             `;
+        }
+    }
+    
     // 解决方案
     if (caseData.solution) {
         html += `
-            <div class="detail-section">                <div class="detail-value large">${escapeHtml(caseData.solution).replace(/\n/g, '<br>')}</div>
+            <div class="detail-section">
+                <div class="detail-label">${caseType === 'repair' ? '维修方案' : '维护方案'}</div>
+                <div class="detail-value large">${escapeHtml(caseData.solution).replace(/\n/g, '<br>')}</div>
             </div>
         `;
+    }
+    
     // 使用备件
     if (caseData.parts_used) {
         html += `
-            <div class="detail-section">                <div class="detail-value">${escapeHtml(caseData.parts_used)}</div>
+            <div class="detail-section">
+                <div class="detail-label">使用备件/材料</div>
+                <div class="detail-value">${escapeHtml(caseData.parts_used)}</div>
             </div>
         `;
+    }
+    
     // 维修人员
     if (caseData.technician) {
         html += `
-            <div class="detail-section">                <div class="detail-value">${escapeHtml(caseData.technician)}</div>
+            <div class="detail-section">
+                <div class="detail-label">维修/维护人员</div>
+                <div class="detail-value">${escapeHtml(caseData.technician)}</div>
             </div>
         `;
+    }
+    
     // 备注
     if (caseData.notes) {
         html += `
-            <div class="detail-section">                <div class="detail-value">${escapeHtml(caseData.notes)}</div>
+            <div class="detail-section">
+                <div class="detail-label">备注</div>
+                <div class="detail-value">${escapeHtml(caseData.notes)}</div>
             </div>
         `;
+    }
+    
     // 创建时间
     if (caseData.created_at) {
         html += `
-            <div class="detail-section">                <div class="detail-value">${escapeHtml(caseData.created_at)}</div>
+            <div class="detail-section">
+                <div class="detail-label">创建时间</div>
+                <div class="detail-value">${escapeHtml(caseData.created_at)}</div>
             </div>
         `;
+    }
+    
     openDetailModal(title, html);
+}
+
 // ==================== 数据统计看板 ====================
 
 async function loadDataStats() {
@@ -2377,14 +2797,21 @@ async function loadDataStats() {
 
             // 渲染最近案例
             renderRecentCases(stats.recent_cases);
+        }
     } catch (e) {
         console.error('加载数据统计失败:', e);
+    }
+}
+
 function renderBarChart(containerId, data, colorType) {
     const container = document.getElementById(containerId);
     if (!container || !data || data.length === 0) {
         if (container) {
             container.innerHTML = '<div style="text-align: center; color: #94a3b8; padding: 20px;">暂无数据</div>';
+        }
         return;
+    }
+
     const maxCount = Math.max(...data.map(d => d.count));
     let html = '';
 
@@ -2403,12 +2830,17 @@ function renderBarChart(containerId, data, colorType) {
     });
 
     container.innerHTML = html;
+}
+
 function renderRecentCases(cases) {
     const container = document.getElementById('recent-cases-list');
     if (!container || !cases || cases.length === 0) {
         if (container) {
             container.innerHTML = '<div style="text-align: center; color: #94a3b8; padding: 20px;">暂无案例</div>';
+        }
         return;
+    }
+
     let html = '';
     cases.forEach(c => {
         const typeLabel = c.case_type === 'repair' ? '维修' : '维护';
@@ -2426,6 +2858,8 @@ function renderRecentCases(cases) {
     });
 
     container.innerHTML = html;
+}
+
 // ==================== 页面内演示功能 ====================
 
 function fillDiagnosisDemo() {
@@ -2434,20 +2868,31 @@ function fillDiagnosisDemo() {
         textarea.value = '空舰导弹-鹰击-83-引战系统-YJ83-FZ-178-引信安全保险机构环境力不足致第二保险未解除';
         textarea.dispatchEvent(new Event('input'));
         textarea.focus();
+    }
+}
+
 function fillMaintenanceDemo() {
     const textarea = document.getElementById('maint-desc');
     if (textarea) {
         textarea.value = '空地导弹-YJ-91被动雷达导引头频综器如何更换';
         textarea.dispatchEvent(new Event('input'));
         textarea.focus();
+    }
+}
+
 function fillQADemo() {
     const textarea = document.getElementById('qa-question');
     if (textarea) {
         textarea.value = '惯性导航原理是什么';
         textarea.dispatchEvent(new Event('input'));
         textarea.focus();
+    }
+}
+
 function fillSearchDemo() {
     const input = document.getElementById('search-query');
     if (input) {
         input.value = '鹰击-18';
         input.focus();
+    }
+}
