@@ -16,8 +16,12 @@ const state = {
 // ==================== DOM 元素 ====================
 
 const elements = {
-    // 状态栏
-    statusBar: document.getElementById('status-bar'),
+    // 侧边栏状态
+    statusDot: document.getElementById('status-dot'),
+    statusText: document.getElementById('status-text'),
+
+    // 顶栏
+    topbarTitle: document.getElementById('topbar-title'),
 
     // 诊断
     faultDesc: document.getElementById('fault-desc'),
@@ -108,23 +112,26 @@ document.addEventListener('DOMContentLoaded', () => {
 // ==================== 标签页切换 ====================
 
 function initTabs() {
-    document.querySelectorAll('.tab').forEach(tab => {
+    const tabTitles = {
+        diagnosis: '故障诊断',
+        maintenance: '日常维护',
+        qa: '智能问答',
+        search: '知识检索',
+        case: '案例管理',
+        feedback: '系统反馈',
+        stats: '系统统计',
+    };
+    document.querySelectorAll('.sidebar-item').forEach(tab => {
         tab.addEventListener('click', () => {
             const tabName = tab.dataset.tab;
-
-            // 更新标签按钮状态
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.sidebar-item').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
-
-            // 更新内容显示
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             document.getElementById(`tab-${tabName}`).classList.add('active');
-
-            // 切换到案例或统计时加载数据
+            elements.topbarTitle.textContent = tabTitles[tabName] || tabName;
             if (tabName === 'case') loadCases();
             if (tabName === 'stats') {
                 refreshStats();
-                // 自动加载可视化
                 loadKnowledgeGraph();
                 loadVectorSpace();
             }
@@ -139,23 +146,24 @@ async function checkStatus() {
         const response = await fetch('/api/status');
         const data = await response.json();
 
-        elements.statusBar.textContent = data.message;
-
         if (data.status === 'ready') {
-            elements.statusBar.className = 'status-bar status-ready';
+            elements.statusDot.className = 'dot dot-online';
+            elements.statusText.textContent = '系统就绪';
             elements.btnDiagnose.disabled = false;
             elements.btnMaintenance.disabled = false;
             elements.btnAsk.disabled = false;
             elements.btnSearch.disabled = false;
         } else if (data.status === 'error') {
-            elements.statusBar.className = 'status-bar status-error';
+            elements.statusDot.className = 'dot dot-error';
+            elements.statusText.textContent = '系统错误';
         } else {
-            elements.statusBar.className = 'status-bar status-loading';
+            elements.statusDot.className = 'dot dot-loading';
+            elements.statusText.textContent = '初始化中';
             setTimeout(checkStatus, 2000);
         }
     } catch (e) {
-        elements.statusBar.textContent = '❌ 连接失败，2秒后重试...';
-        elements.statusBar.className = 'status-bar status-loading';
+        elements.statusDot.className = 'dot dot-loading';
+        elements.statusText.textContent = '重试中';
         setTimeout(checkStatus, 2000);
     }
 }
@@ -1492,7 +1500,6 @@ let kgSimulation = null;
 
 async function loadKnowledgeGraph() {
     const container = document.getElementById('kg-container');
-    const statsDiv = document.getElementById('kg-stats');
     
     container.innerHTML = '<div class="viz-loading"><div class="viz-loading-spinner"></div><p>正在加载知识图谱...</p></div>';
     
@@ -1501,7 +1508,7 @@ async function loadKnowledgeGraph() {
         const result = await response.json();
         
         if (!result.success || !result.data.nodes.length) {
-            container.innerHTML = '<div class="viz-empty"><div class="viz-empty-icon">📭</div><div class="viz-empty-text">暂无知识图谱数据</div></div>';
+            container.innerHTML = '<div class="viz-empty"><div class="viz-empty-icon"></div><div class="viz-empty-text">暂无知识图谱数据</div></div>';
             return;
         }
         
@@ -1705,7 +1712,6 @@ function initVizTabs() {}
 
 async function loadVectorSpace() {
     const container = document.getElementById('vs-container');
-    const statsDiv = document.getElementById('vs-stats');
     
     container.innerHTML = '<div class="viz-loading"><div class="viz-loading-spinner"></div><p>正在加载向量空间...</p></div>';
     
@@ -1714,22 +1720,13 @@ async function loadVectorSpace() {
         const result = await response.json();
         
         if (!result.success || !result.data.points.length) {
-            container.innerHTML = '<div class="viz-empty"><div class="viz-empty-icon">📭</div><div class="viz-empty-text">暂无向量数据，请先运行 import_dataset.py</div></div>';
+            container.innerHTML = '<div class="viz-empty"><div class="viz-empty-text">暂无向量数据</div></div>';
             return;
         }
         
-        const { points, stats } = result.data;
-        
-        // 显示统计信息
-        let statsHtml = `<strong>📊 统计:</strong> ${stats.total} 条向量, ${stats.categories} 个类别`;
-        if (stats.collections && stats.collections.length > 0) {
-            statsHtml += '<br><strong>Qdrant 集合:</strong> ';
-            statsHtml += stats.collections.map(c => `${c.name}: ${c.points} points`).join(' | ');
-        }
-        statsDiv.innerHTML = statsHtml;
-        
-        // 渲染散点图
-        renderVectorSpace(container, points, stats);
+        const { points } = result.data;
+
+        renderVectorSpace(container, points, result.data.stats);
         
     } catch (error) {
         container.innerHTML = `<div class="viz-empty"><div class="viz-empty-icon">❌</div><div class="viz-empty-text">加载失败: ${error.message}</div></div>`;
