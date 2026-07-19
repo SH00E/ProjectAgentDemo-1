@@ -1,124 +1,89 @@
 import re
 
-path = 'repair_agent/ui/static/dashboard.html'
+path = 'repair_agent/ui/static/app.js'
 with open(path, encoding='utf-8') as f:
     text = f.read()
 
-# Remove Hub node block and simplify force simulation
-text = text.replace("""            const nodes = data.nodes.map(n => ({...n}));
-            const links = data.links.map(l => ({...l}));
+# 1) Guard initStats against null btnRefreshStats
+old_init = """function initStats() {
+    if (elements.btnRefreshStats) {
+        elements.btnRefreshStats.addEventListener('click', refreshStats);
+    }
 
-            const hubId = "__hub__";
-            nodes.push({ id: hubId, type: "Hub", label: "\u88c5\u5907\u77e5\u8bc6\u56fe\u8c31", group: "hub" });
-            const qaChapters = nodes.filter(n => n.type === "QAChapter");
-            const topAircraft = nodes.filter(n => n.type === "Aircraft").slice(0, 5);
-            const topMfgs = nodes.filter(n => n.type === "Manufacturer").slice(0, 3);
-            for (const ch of qaChapters) {
-                links.push({ source: hubId, target: ch.id, type: "HUB_QA", weight: 1 });
-            }
-            for (const a of topAircraft) {
-                links.push({ source: hubId, target: a.id, type: "HUB_AVIATION", weight: 1 });
-            }
-            for (const m of topMfgs) {
-                links.push({ source: hubId, target: m.id, type: "HUB_AVIATION", weight: 1 });
-            }
+    // 初始加载统计（refreshStats 会自动处理）
+    refreshStats();
+}"""
 
-            const sim = d3.forceSimulation(nodes)
-                .force('link', d3.forceLink(links).id(d => d.id).distance(d => {
-                    if (d.type === 'BELONGS_TO') return 30;
-                    if (d.type === 'HUB_QA' || d.type === 'HUB_AVIATION') return 120;
-                    if (d.type === 'MANUFACTURED_BY') return 60;
-                    return 80;
-                }).strength(d => {
-                    if (d.type === 'BELONGS_TO') return 0.8;
-                    if (d.type === 'HUB_QA' || d.type === 'HUB_AVIATION') return 0.1;
-                    return 0.2;
-                }))
-                .force('charge', d3.forceManyBody().strength(-180))
-                .force('center', d3.forceCenter(W/2, H/2))
-                .force('collision', d3.forceCollide(18));
+text = re.sub(r'function initStats\(\) \{[\s\S]*?refreshStats\(\);\s*\}', old_init, text)
 
-            const link = g.append('g').selectAll('line')
-                .data(links).join('line')
-                .attr('stroke', '#334155')
-                .attr('stroke-width', d => d.type === 'HUB_QA' || d.type === 'HUB_AVIATION' ? 0.8 : d.type === 'BELONGS_TO' ? 1 : d.weight ? Math.min(Math.sqrt(d.weight)*0.5, 4) : 1.5)
-                .attr('stroke-dasharray', d => d.type === 'HUB_QA' || d.type === 'HUB_AVIATION' ? '4,4' : null)
-                .attr('stroke-opacity', d => d.type === 'HUB_QA' || d.type === 'HUB_AVIATION' ? 0.3 : 0.6);
+# 2) Fix refreshStats - guard btnRefreshStats and remove duplicate components/sessionId code
+text = text.replace('elements.btnRefreshStats.disabled = true;', 'if (elements.btnRefreshStats) { elements.btnRefreshStats.disabled = true; elements.btnRefreshStats.textContent = ')
+# Can't do complex replacements easily. Let me use a different approach.
 
-            const node = g.append('g').selectAll('g')
-                .data(nodes).join('g')
-                .attr('cursor', 'pointer')
-                .call(d3.drag()
-                    .on('start', (event, d) => { if (!event.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
-                    .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
-                    .on('end', (event, d) => { if (!event.active) sim.alphaTarget(0); d.fx = null; d.fy = null; })
-                );
+# Actually, let me just fix the crashing code paths by making btnRefreshStats optional
 
-            node.append('circle')
-                .attr('r', d => d.type === 'Hub' ? 14 : d.type === 'QAChapter' ? 12 : d.type === 'QAPair' ? 5 : d.type === 'Aircraft' ? 10 : 7)
-                .attr('fill', d => d.type === 'Hub' ? '#e2e8f0' : typeColors[d.type] || '#94a3b8')
-                .attr('stroke', d => d.type === 'Hub' ? '#94a3b8' : '#1e293b')
-                .attr('stroke-width', d => d.type === 'Hub' ? 3 : 2)
-                .attr('stroke-dasharray', d => d.type === 'Hub' ? '3,2' : null);
+# Fix refreshStats line 1379: elements.btnRefreshStats.disabled = true -> guard
+text = text.replace(
+    '    elements.btnRefreshStats.disabled = true;\n    elements.btnRefreshStats.textContent =',
+    '    if (elements.btnRefreshStats) {\n        elements.btnRefreshStats.disabled = true;\n        elements.btnRefreshStats.textContent ='
+)
 
-            node.append('text')
-                .text(d => d.type === 'Hub' ? d.label : d.label.length > 18 ? d.label.slice(0, 18) + '...' : d.label)
-                .attr('x', d => d.type === 'Hub' ? 18 : d.type === 'QAChapter' ? 16 : 10)
-                .attr('y', d => d.type === 'Hub' ? 5 : 4)
-                .attr('font-size', d => d.type === 'Hub' ? 12 : d.type === 'QAChapter' ? 10 : 8)
-                .attr('fill', d => d.type === 'Hub' ? '#94a3b8' : '#cbd5e1')
-                .attr('font-weight', d => d.type === 'Hub' ? 'bold' : 'normal')
-                .attr('pointer-events', 'none');""",
+text = text.replace(
+    '    } finally {\n        elements.btnRefreshStats.disabled = false;\n        elements.btnRefreshStats.textContent =',
+    '    } finally {\n        if (elements.btnRefreshStats) {\n            elements.btnRefreshStats.disabled = false;\n            elements.btnRefreshStats.textContent ='
+)
 
-"""            const nodes = data.nodes.map(n => ({...n}));
-            const links = data.links.map(l => ({...l}));
+# Close the braces we opened - find the next ); after textContent assignments
+text = re.sub(
+    r'(elements\.btnRefreshStats\.textContent = .+?;)\n(\s+)}',
+    r'\1\n        }\n\2}',
+    text
+)
 
-            const sim = d3.forceSimulation(nodes)
-                .force('link', d3.forceLink(links).id(d => d.id).distance(d => {
-                    if (d.type === 'BELONGS_TO') return 40;
-                    if (d.type === 'RELATED_TO') return 60;
-                    if (d.type === 'MANUFACTURED_BY') return 60;
-                    return 80;
-                }).strength(d => {
-                    if (d.type === 'BELONGS_TO') return 0.8;
-                    if (d.type === 'RELATED_TO') return 0.3;
-                    return 0.2;
-                }))
-                .force('charge', d3.forceManyBody().strength(-150))
-                .force('center', d3.forceCenter(W/2, H/2))
-                .force('collision', d3.forceCollide(18));
+# Remove the duplicate history call at end of refreshStats
+text = text.replace("""
+    // 同时获取诊断历史
+    try {
+        const historyResponse = await fetch('/api/history');
+        const historyData = await historyResponse.json();
 
-            const link = g.append('g').selectAll('line')
-                .data(links).join('line')
-                .attr('stroke', '#334155')
-                .attr('stroke-width', d => d.type === 'RELATED_TO' ? 1.2 : d.type === 'BELONGS_TO' ? 1 : d.weight ? Math.min(Math.sqrt(d.weight)*0.5, 4) : 1.5)
-                .attr('stroke-dasharray', d => d.type === 'RELATED_TO' ? '4,4' : null)
-                .attr('stroke-opacity', d => d.type === 'RELATED_TO' ? 0.4 : 0.6);
+        if (historyData.success) {
+            elements.statDiagnosisCount.textContent = historyData.history?.length || 0;
+        }
+    } catch (e) {
+        console.error('获取诊断历史失败:', e);
+    }
+}""", "\n}")
 
-            const node = g.append('g').selectAll('g')
-                .data(nodes).join('g')
-                .attr('cursor', 'pointer')
-                .call(d3.drag()
-                    .on('start', (event, d) => { if (!event.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
-                    .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
-                    .on('end', (event, d) => { if (!event.active) sim.alphaTarget(0); d.fx = null; d.fy = null; })
-                );
+# Remove references to deleted elements in refreshStats
+text = text.replace("            // 会话信息\n            elements.statSessionId.textContent = stats.system?.session_id || stats.session_id || '--';\n", "")
+text = re.sub(r'\n\s*// 组件状态[\s\S]*?// 运行状态', '', text)
 
-            node.append('circle')
-                .attr('r', d => d.type === 'QAChapter' ? 12 : d.type === 'QAPair' ? 6 : d.type === 'Aircraft' ? 10 : 7)
-                .attr('fill', d => typeColors[d.type] || '#94a3b8')
-                .attr('stroke', '#1e293b')
-                .attr('stroke-width', 2);
+# Now fix case rendering - make it card grid
+# Replace the if (data.success && ...) until the closing } of loadCases
 
-            node.append('text')
-                .text(d => d.label.length > 18 ? d.label.slice(0, 18) + '...' : d.label)
-                .attr('x', d => d.type === 'QAChapter' ? 16 : 10)
-                .attr('y', 4)
-                .attr('font-size', d => d.type === 'QAChapter' ? 10 : 8)
-                .attr('fill', '#cbd5e1')
-                .attr('pointer-events', 'none');""")
+old_case = """        if (data.success && data.cases && data.cases.length > 0) {
+            let html = '';
+            data.cases.forEach((c, i) => {"""
 
+new_case = """        if (data.success && data.cases && data.cases.length > 0) {
+            let html = '<div class="case-grid">';
+            data.cases.forEach((c) => {"""
+
+text = text.replace(old_case, new_case)
+
+# Replace html += '</div>';  elements.caseList.innerHTML = html;  renderPagination
+text = text.replace(
+    "            elements.caseList.innerHTML = html;\n\n            // 渲染分页\n            renderPagination(data.total, data.page, data.total_pages);",
+    "            html += '</div>';\n            elements.caseList.innerHTML = html;\n            renderPagination(data.total, data.page, data.total_pages);"
+)
+
+# Replace the case-item rendering with case-card rendering
+# Replace typeLabel
+text = text.replace("const typeLabel = caseType === 'repair' ? '\U0001f527'", "const typeLabel = caseType === 'repair' ? '")
+
+# Just do minimal: fix the missing closing div for case-grid
 with open(path, 'w', encoding='utf-8') as f:
     f.write(text)
 
-print('Dashboard cleaned - Hub removed, RELATED_TO added')
+print('Fixed app.js')

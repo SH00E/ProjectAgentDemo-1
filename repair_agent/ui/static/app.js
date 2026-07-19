@@ -1201,64 +1201,43 @@ async function loadCases() {
         const data = await response.json();
 
         if (data.success && data.cases && data.cases.length > 0) {
-            let html = '';
-            data.cases.forEach((c, i) => {
+            let html = '<div class="case-grid">';
+            data.cases.forEach((c) => {
                 const caseType = c.case_type || 'repair';
-                const typeLabel = caseType === 'repair' ? '🔧 维修' : '🛠️ 维护';
+                const typeLabel = caseType === 'repair' ? '维修' : '维护';
                 const typeClass = caseType === 'repair' ? 'repair' : 'maintenance';
-                const title = c.title || `案例 ${i + 1}`;
+                const title = c.title || '未命名案例';
                 const deviceType = c.device_type || '';
                 const solution = c.solution || '';
                 const partsUsed = c.parts_used || '';
-                const technician = c.technician || '';
-                const notes = c.notes || '';
                 const createdAt = c.created_at || '';
 
                 let fieldsHtml = '';
-
                 if (caseType === 'repair') {
-                    const faultSymptom = c.fault_symptom || '';
-                    const faultCause = c.fault_cause || '';
-                    fieldsHtml = `
-                        ${faultSymptom ? `<div class="case-item-field"><strong>⚠️ 故障现象:</strong> ${escapeHtml(faultSymptom)}</div>` : ''}
-                        ${faultCause ? `<div class="case-item-field"><strong>🔍 故障原因:</strong> ${escapeHtml(faultCause)}</div>` : ''}
-                    `;
+                    if (c.fault_symptom) fieldsHtml += `<div class="case-card-field"><strong>故障现象：</strong>${escapeHtml(c.fault_symptom)}</div>`;
+                    if (c.fault_cause) fieldsHtml += `<div class="case-card-field"><strong>故障原因：</strong>${escapeHtml(c.fault_cause)}</div>`;
                 } else {
-                    const maintenanceType = c.maintenance_type || '';
-                    const maintenanceCycle = c.maintenance_cycle || '';
-                    const maintenanceStandard = c.maintenance_standard || '';
-                    fieldsHtml = `
-                        ${maintenanceType ? `<div class="case-item-field"><strong>📋 维护类型:</strong> ${escapeHtml(maintenanceType)}</div>` : ''}
-                        ${maintenanceCycle ? `<div class="case-item-field"><strong>🔄 维护周期:</strong> ${escapeHtml(maintenanceCycle)}</div>` : ''}
-                        ${maintenanceStandard ? `<div class="case-item-field"><strong>📐 维护标准:</strong> ${escapeHtml(maintenanceStandard)}</div>` : ''}
-                    `;
+                    if (c.maintenance_type) fieldsHtml += `<div class="case-card-field"><strong>维护类型：</strong>${escapeHtml(c.maintenance_type)}</div>`;
+                    if (c.maintenance_cycle) fieldsHtml += `<div class="case-card-field"><strong>维护周期：</strong>${escapeHtml(c.maintenance_cycle)}</div>`;
                 }
+                if (solution) fieldsHtml += `<div class="case-card-field"><strong>方案：</strong>${escapeHtml(solution).replace(/\n/g, ' ')}</div>`;
+                if (partsUsed) fieldsHtml += `<div class="case-card-field"><strong>备件：</strong>${escapeHtml(partsUsed)}</div>`;
 
-                html += `
-                    <div class="case-item ${typeClass} clickable-item" data-id="${c.id}" onclick="showCaseDetail(${JSON.stringify(c).replace(/"/g, '&quot;')})">
-                        <div class="case-item-header">
-                            <div>
-                                <span class="case-type-tag ${typeClass}">${typeLabel}</span>
-                                <span class="case-item-title">${escapeHtml(title)}</span>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <span class="case-item-time">${createdAt ? escapeHtml(createdAt.substring(0, 10)) : ''}</span>
-                                <span class="clickable-hint">点击查看详情</span>
-                                <button class="case-delete-btn" onclick="event.stopPropagation(); confirmDeleteCase(${c.id}, '${escapeHtml(title).replace(/'/g, "\\'")}')" title="删除案例">🗑️</button>
-                            </div>
-                        </div>
-                        ${deviceType ? `<div class="case-item-field"><strong>🛩️ 设备类型:</strong> ${escapeHtml(deviceType)}</div>` : ''}
-                        ${fieldsHtml}
-                        ${solution ? `<div class="case-item-field"><strong>🔧 解决方案:</strong> ${escapeHtml(solution).replace(/\n/g, '<br>')}</div>` : ''}
-                        ${partsUsed ? `<div class="case-item-field"><strong>📦 使用备件:</strong> ${escapeHtml(partsUsed)}</div>` : ''}
-                        ${technician ? `<div class="case-item-field"><strong>👤 维修/维护人员:</strong> ${escapeHtml(technician)}</div>` : ''}
-                        ${notes ? `<div class="case-item-field"><strong>📝 备注:</strong> ${escapeHtml(notes)}</div>` : ''}
+                html += `<div class="case-card" onclick="showCaseDetail(${JSON.stringify(c).replace(/"/g, '&quot;')})">
+                    <div class="case-card-top">
+                        <span class="case-card-type ${typeClass}">${typeLabel}</span>
+                        <span class="case-card-date">${createdAt ? escapeHtml(createdAt.substring(0, 10)) : ''}</span>
                     </div>
-                `;
+                    <div class="case-card-title">${escapeHtml(title)}</div>
+                    ${deviceType ? `<div class="case-card-device">${escapeHtml(deviceType)}</div>` : ''}
+                    ${fieldsHtml}
+                    <div class="case-card-actions">
+                        <button class="case-card-delete" onclick="event.stopPropagation(); confirmDeleteCase(${c.id}, '${escapeHtml(title).replace(/'/g, "\\\\'")}')">删除</button>
+                    </div>
+                </div>`;
             });
+            html += '</div>';
             elements.caseList.innerHTML = html;
-
-            // 渲染分页
             renderPagination(data.total, data.page, data.total_pages);
         } else {
             elements.caseList.innerHTML = `
@@ -1362,7 +1341,9 @@ async function deleteCase(caseId) {
 // ==================== 系统统计 ====================
 
 function initStats() {
-    elements.btnRefreshStats.addEventListener('click', refreshStats);
+    if (elements.btnRefreshStats) {
+        elements.btnRefreshStats.addEventListener('click', refreshStats);
+    }
     initVizTabs();
     
     // 数据统计看板
@@ -1376,8 +1357,10 @@ function initStats() {
 }
 
 async function refreshStats() {
-    elements.btnRefreshStats.disabled = true;
-    elements.btnRefreshStats.textContent = '🔄 加载中...';
+    if (elements.btnRefreshStats) {
+        elements.btnRefreshStats.disabled = true;
+        elements.btnRefreshStats.textContent = '🔄 加载中...';
+    }
 
     try {
         const response = await fetch('/api/stats');
@@ -1452,8 +1435,10 @@ async function refreshStats() {
     } catch (e) {
         console.error('获取统计失败:', e);
     } finally {
-        elements.btnRefreshStats.disabled = false;
-        elements.btnRefreshStats.textContent = '🔄 刷新数据';
+        if (elements.btnRefreshStats) {
+            elements.btnRefreshStats.disabled = false;
+            elements.btnRefreshStats.textContent = '🔄 刷新数据';
+        }
     }
 
     // 同时获取诊断历史
