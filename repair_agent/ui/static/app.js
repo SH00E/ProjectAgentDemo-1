@@ -16,12 +16,8 @@ const state = {
 // ==================== DOM 元素 ====================
 
 const elements = {
-    // 侧边栏状态
-    statusDot: document.getElementById('status-dot'),
-    statusText: document.getElementById('status-text'),
-
-    // 顶栏
-    topbarTitle: document.getElementById('topbar-title'),
+    // 状态栏
+    statusBar: document.getElementById('status-bar'),
 
     // 诊断
     faultDesc: document.getElementById('fault-desc'),
@@ -112,26 +108,23 @@ document.addEventListener('DOMContentLoaded', () => {
 // ==================== 标签页切换 ====================
 
 function initTabs() {
-    const tabTitles = {
-        diagnosis: '故障诊断',
-        maintenance: '日常维护',
-        qa: '智能问答',
-        search: '知识检索',
-        case: '案例管理',
-        feedback: '系统反馈',
-        stats: '系统统计',
-    };
-    document.querySelectorAll('.sidebar-item').forEach(tab => {
+    document.querySelectorAll('.tab').forEach(tab => {
         tab.addEventListener('click', () => {
             const tabName = tab.dataset.tab;
-            document.querySelectorAll('.sidebar-item').forEach(t => t.classList.remove('active'));
+
+            // 更新标签按钮状态
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
+
+            // 更新内容显示
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             document.getElementById(`tab-${tabName}`).classList.add('active');
-            elements.topbarTitle.textContent = tabTitles[tabName] || tabName;
+
+            // 切换到案例或统计时加载数据
             if (tabName === 'case') loadCases();
             if (tabName === 'stats') {
                 refreshStats();
+                // 自动加载可视化
                 loadKnowledgeGraph();
                 loadVectorSpace();
             }
@@ -146,24 +139,23 @@ async function checkStatus() {
         const response = await fetch('/api/status');
         const data = await response.json();
 
+        elements.statusBar.textContent = data.message;
+
         if (data.status === 'ready') {
-            elements.statusDot.className = 'dot dot-online';
-            elements.statusText.textContent = '系统就绪';
+            elements.statusBar.className = 'status-bar status-ready';
             elements.btnDiagnose.disabled = false;
             elements.btnMaintenance.disabled = false;
             elements.btnAsk.disabled = false;
             elements.btnSearch.disabled = false;
         } else if (data.status === 'error') {
-            elements.statusDot.className = 'dot dot-error';
-            elements.statusText.textContent = '系统错误';
+            elements.statusBar.className = 'status-bar status-error';
         } else {
-            elements.statusDot.className = 'dot dot-loading';
-            elements.statusText.textContent = '初始化中';
+            elements.statusBar.className = 'status-bar status-loading';
             setTimeout(checkStatus, 2000);
         }
     } catch (e) {
-        elements.statusDot.className = 'dot dot-loading';
-        elements.statusText.textContent = '重试中';
+        elements.statusBar.textContent = '❌ 连接失败，2秒后重试...';
+        elements.statusBar.className = 'status-bar status-loading';
         setTimeout(checkStatus, 2000);
     }
 }
@@ -1201,43 +1193,64 @@ async function loadCases() {
         const data = await response.json();
 
         if (data.success && data.cases && data.cases.length > 0) {
-            let html = '<div class="case-grid">';
-            data.cases.forEach((c) => {
+            let html = '';
+            data.cases.forEach((c, i) => {
                 const caseType = c.case_type || 'repair';
-                const typeLabel = caseType === 'repair' ? '维修' : '维护';
+                const typeLabel = caseType === 'repair' ? '🔧 维修' : '🛠️ 维护';
                 const typeClass = caseType === 'repair' ? 'repair' : 'maintenance';
-                const title = c.title || '未命名案例';
+                const title = c.title || `案例 ${i + 1}`;
                 const deviceType = c.device_type || '';
                 const solution = c.solution || '';
                 const partsUsed = c.parts_used || '';
+                const technician = c.technician || '';
+                const notes = c.notes || '';
                 const createdAt = c.created_at || '';
 
                 let fieldsHtml = '';
-                if (caseType === 'repair') {
-                    if (c.fault_symptom) fieldsHtml += `<div class="case-card-field"><strong>故障现象：</strong>${escapeHtml(c.fault_symptom)}</div>`;
-                    if (c.fault_cause) fieldsHtml += `<div class="case-card-field"><strong>故障原因：</strong>${escapeHtml(c.fault_cause)}</div>`;
-                } else {
-                    if (c.maintenance_type) fieldsHtml += `<div class="case-card-field"><strong>维护类型：</strong>${escapeHtml(c.maintenance_type)}</div>`;
-                    if (c.maintenance_cycle) fieldsHtml += `<div class="case-card-field"><strong>维护周期：</strong>${escapeHtml(c.maintenance_cycle)}</div>`;
-                }
-                if (solution) fieldsHtml += `<div class="case-card-field"><strong>方案：</strong>${escapeHtml(solution).replace(/\n/g, ' ')}</div>`;
-                if (partsUsed) fieldsHtml += `<div class="case-card-field"><strong>备件：</strong>${escapeHtml(partsUsed)}</div>`;
 
-                html += `<div class="case-card" onclick="showCaseDetail(${JSON.stringify(c).replace(/"/g, '&quot;')})">
-                    <div class="case-card-top">
-                        <span class="case-card-type ${typeClass}">${typeLabel}</span>
-                        <span class="case-card-date">${createdAt ? escapeHtml(createdAt.substring(0, 10)) : ''}</span>
+                if (caseType === 'repair') {
+                    const faultSymptom = c.fault_symptom || '';
+                    const faultCause = c.fault_cause || '';
+                    fieldsHtml = `
+                        ${faultSymptom ? `<div class="case-item-field"><strong>⚠️ 故障现象:</strong> ${escapeHtml(faultSymptom)}</div>` : ''}
+                        ${faultCause ? `<div class="case-item-field"><strong>🔍 故障原因:</strong> ${escapeHtml(faultCause)}</div>` : ''}
+                    `;
+                } else {
+                    const maintenanceType = c.maintenance_type || '';
+                    const maintenanceCycle = c.maintenance_cycle || '';
+                    const maintenanceStandard = c.maintenance_standard || '';
+                    fieldsHtml = `
+                        ${maintenanceType ? `<div class="case-item-field"><strong>📋 维护类型:</strong> ${escapeHtml(maintenanceType)}</div>` : ''}
+                        ${maintenanceCycle ? `<div class="case-item-field"><strong>🔄 维护周期:</strong> ${escapeHtml(maintenanceCycle)}</div>` : ''}
+                        ${maintenanceStandard ? `<div class="case-item-field"><strong>📐 维护标准:</strong> ${escapeHtml(maintenanceStandard)}</div>` : ''}
+                    `;
+                }
+
+                html += `
+                    <div class="case-item ${typeClass} clickable-item" data-id="${c.id}" onclick="showCaseDetail(${JSON.stringify(c).replace(/"/g, '&quot;')})">
+                        <div class="case-item-header">
+                            <div>
+                                <span class="case-type-tag ${typeClass}">${typeLabel}</span>
+                                <span class="case-item-title">${escapeHtml(title)}</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="case-item-time">${createdAt ? escapeHtml(createdAt.substring(0, 10)) : ''}</span>
+                                <span class="clickable-hint">点击查看详情</span>
+                                <button class="case-delete-btn" onclick="event.stopPropagation(); confirmDeleteCase(${c.id}, '${escapeHtml(title).replace(/'/g, "\\'")}')" title="删除案例">🗑️</button>
+                            </div>
+                        </div>
+                        ${deviceType ? `<div class="case-item-field"><strong>🛩️ 设备类型:</strong> ${escapeHtml(deviceType)}</div>` : ''}
+                        ${fieldsHtml}
+                        ${solution ? `<div class="case-item-field"><strong>🔧 解决方案:</strong> ${escapeHtml(solution).replace(/\n/g, '<br>')}</div>` : ''}
+                        ${partsUsed ? `<div class="case-item-field"><strong>📦 使用备件:</strong> ${escapeHtml(partsUsed)}</div>` : ''}
+                        ${technician ? `<div class="case-item-field"><strong>👤 维修/维护人员:</strong> ${escapeHtml(technician)}</div>` : ''}
+                        ${notes ? `<div class="case-item-field"><strong>📝 备注:</strong> ${escapeHtml(notes)}</div>` : ''}
                     </div>
-                    <div class="case-card-title">${escapeHtml(title)}</div>
-                    ${deviceType ? `<div class="case-card-device">${escapeHtml(deviceType)}</div>` : ''}
-                    ${fieldsHtml}
-                    <div class="case-card-actions">
-                        <button class="case-card-delete" onclick="event.stopPropagation(); confirmDeleteCase(${c.id}, '${escapeHtml(title).replace(/'/g, "\\\\'")}')">删除</button>
-                    </div>
-                </div>`;
+                `;
             });
-            html += '</div>';
             elements.caseList.innerHTML = html;
+
+            // 渲染分页
             renderPagination(data.total, data.page, data.total_pages);
         } else {
             elements.caseList.innerHTML = `
@@ -1341,9 +1354,7 @@ async function deleteCase(caseId) {
 // ==================== 系统统计 ====================
 
 function initStats() {
-    if (elements.btnRefreshStats) {
-        elements.btnRefreshStats.addEventListener('click', refreshStats);
-    }
+    elements.btnRefreshStats.addEventListener('click', refreshStats);
     initVizTabs();
     
     // 数据统计看板
@@ -1357,10 +1368,8 @@ function initStats() {
 }
 
 async function refreshStats() {
-    if (elements.btnRefreshStats) {
-        elements.btnRefreshStats.disabled = true;
-        elements.btnRefreshStats.textContent = '🔄 加载中...';
-    }
+    elements.btnRefreshStats.disabled = true;
+    elements.btnRefreshStats.textContent = '🔄 加载中...';
 
     try {
         const response = await fetch('/api/stats');
@@ -1435,10 +1444,8 @@ async function refreshStats() {
     } catch (e) {
         console.error('获取统计失败:', e);
     } finally {
-        if (elements.btnRefreshStats) {
-            elements.btnRefreshStats.disabled = false;
-            elements.btnRefreshStats.textContent = '🔄 刷新数据';
-        }
+        elements.btnRefreshStats.disabled = false;
+        elements.btnRefreshStats.textContent = '🔄 刷新数据';
     }
 
     // 同时获取诊断历史
@@ -1485,6 +1492,7 @@ let kgSimulation = null;
 
 async function loadKnowledgeGraph() {
     const container = document.getElementById('kg-container');
+    const statsDiv = document.getElementById('kg-stats');
     
     container.innerHTML = '<div class="viz-loading"><div class="viz-loading-spinner"></div><p>正在加载知识图谱...</p></div>';
     
@@ -1493,7 +1501,7 @@ async function loadKnowledgeGraph() {
         const result = await response.json();
         
         if (!result.success || !result.data.nodes.length) {
-            container.innerHTML = '<div class="viz-empty"><div class="viz-empty-icon"></div><div class="viz-empty-text">暂无知识图谱数据</div></div>';
+            container.innerHTML = '<div class="viz-empty"><div class="viz-empty-icon">📭</div><div class="viz-empty-text">暂无知识图谱数据</div></div>';
             return;
         }
         
@@ -1697,6 +1705,7 @@ function initVizTabs() {}
 
 async function loadVectorSpace() {
     const container = document.getElementById('vs-container');
+    const statsDiv = document.getElementById('vs-stats');
     
     container.innerHTML = '<div class="viz-loading"><div class="viz-loading-spinner"></div><p>正在加载向量空间...</p></div>';
     
@@ -1705,13 +1714,22 @@ async function loadVectorSpace() {
         const result = await response.json();
         
         if (!result.success || !result.data.points.length) {
-            container.innerHTML = '<div class="viz-empty"><div class="viz-empty-text">暂无向量数据</div></div>';
+            container.innerHTML = '<div class="viz-empty"><div class="viz-empty-icon">📭</div><div class="viz-empty-text">暂无向量数据，请先运行 import_dataset.py</div></div>';
             return;
         }
         
-        const { points } = result.data;
-
-        renderVectorSpace(container, points, result.data.stats);
+        const { points, stats } = result.data;
+        
+        // 显示统计信息
+        let statsHtml = `<strong>📊 统计:</strong> ${stats.total} 条向量, ${stats.categories} 个类别`;
+        if (stats.collections && stats.collections.length > 0) {
+            statsHtml += '<br><strong>Qdrant 集合:</strong> ';
+            statsHtml += stats.collections.map(c => `${c.name}: ${c.points} points`).join(' | ');
+        }
+        statsDiv.innerHTML = statsHtml;
+        
+        // 渲染散点图
+        renderVectorSpace(container, points, stats);
         
     } catch (error) {
         container.innerHTML = `<div class="viz-empty"><div class="viz-empty-icon">❌</div><div class="viz-empty-text">加载失败: ${error.message}</div></div>`;

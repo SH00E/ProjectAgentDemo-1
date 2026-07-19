@@ -8,249 +8,571 @@
     <script src="/static/d3.min.js"></script>
 </head>
 <body>
-    <!-- ==================== SIDEBAR ==================== -->
-    <nav class="sidebar">
-        <img src="/static/logo.png" alt="Logo" class="sidebar-logo">
-
-        <div class="sidebar-nav">
-            <button class="sidebar-item active" data-tab="diagnosis">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                <span>故障诊断</span>
-            </button>
-            <button class="sidebar-item" data-tab="maintenance">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-                <span>日常维护</span>
-            </button>
-            <button class="sidebar-item" data-tab="qa">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                <span>智能问答</span>
-            </button>
-            <button class="sidebar-item" data-tab="search">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-                <span>知识检索</span>
-            </button>
-            <button class="sidebar-item" data-tab="case">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
-                <span>案例管理</span>
-            </button>
-            <button class="sidebar-item" data-tab="feedback">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="15" r="1"/></svg>
-                <span>系统反馈</span>
-            </button>
-            <button class="sidebar-item" data-tab="stats">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                <span>系统统计</span>
-            </button>
-        </div>
-
-        <div class="sidebar-status">
-            <div class="sidebar-status-dot" id="sidebar-status">
-                <div class="dot dot-loading" id="status-dot"></div>
-                <span id="status-text">初始化中</span>
-            </div>
-        </div>
-    </nav>
-
-    <!-- ==================== MAIN ==================== -->
-    <div class="main">
-        <div class="topbar">
-            <div class="topbar-title" id="topbar-title">故障诊断</div>
-            <div class="topbar-actions">
-                <a href="/dashboard" target="_blank" class="topbar-dashboard">数据大屏</a>
-            </div>
-        </div>
-
-        <div class="content">
-            <!-- ============ Tab: 故障诊断 ============ -->
-            <div class="tab-content active" id="tab-diagnosis">
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">输入</div>
-                        <button class="btn-demo" onclick="fillDiagnosisDemo()">填充示例</button>
-                    </div>
-                    <div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
-                        <div class="form-group">
-                            <label for="fault-desc">故障描述</label>
-                            <textarea id="fault-desc" rows="6" placeholder="描述故障现象、设备型号、异常表现等..."></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="fault-image">上传照片（可选）</label>
-                            <input type="file" id="fault-image" accept="image/*">
-                            <div id="image-preview" class="image-preview hidden">
-                                <img id="preview-img" src="" alt="预览">
-                                <button id="remove-image" class="btn-remove">&times;</button>
-                            </div>
-                        </div>
-                        <button id="btn-diagnose" class="btn btn-primary" disabled>开始诊断</button>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div class="card-header"><div class="card-title">推理过程</div></div>
-                    <div class="card-body"><div id="cot-area" class="cot-box"><div class="placeholder">等待输入故障描述...</div></div></div>
-                </div>
-
-                <div style="display:flex;flex-direction:column;gap:16px;">
-                    <div class="card" style="flex:1;">
-                        <div class="card-header"><div class="card-title">诊断依据</div></div>
-                        <div class="card-body"><div id="evidence-area" class="evidence-box"><div class="placeholder">诊断完成后将显示相关依据...</div></div></div>
-                    </div>
-                    <div class="card" style="flex:1;">
-                        <div class="card-header"><div class="card-title">维修工单</div></div>
-                        <div class="card-body"><div id="order-area" class="order-box"><div class="placeholder">诊断完成后将生成工单...</div></div></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ============ Tab: 日常维护 ============ -->
-            <div class="tab-content" id="tab-maintenance">
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">维护需求</div>
-                        <button class="btn-demo" onclick="fillMaintenanceDemo()">填充示例</button>
-                    </div>
-                    <div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
-                        <div class="form-group">
-                            <label for="maint-desc">维护描述</label>
-                            <textarea id="maint-desc" rows="6" placeholder="描述维护类型、设备型号、周期要求等..."></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="maint-image">上传照片（可选）</label>
-                            <input type="file" id="maint-image" accept="image/*">
-                            <div id="maint-image-preview" class="image-preview hidden">
-                                <img id="maint-preview-img" src="" alt="预览">
-                                <button id="maint-remove-image" class="btn-remove">&times;</button>
-                            </div>
-                        </div>
-                        <button id="btn-maintenance" class="btn btn-primary" disabled>生成维护方案</button>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div class="card-header"><div class="card-title">分析过程</div></div>
-                    <div class="card-body"><div id="maint-cot-area" class="cot-box"><div class="placeholder">等待输入维护需求...</div></div></div>
-                </div>
-
-                <div style="display:flex;flex-direction:column;gap:16px;">
-                    <div class="card" style="flex:1;">
-                        <div class="card-header"><div class="card-title">维护依据</div></div>
-                        <div class="card-body"><div id="maint-evidence-area" class="evidence-box"><div class="placeholder">分析完成后将显示相关维护依据...</div></div></div>
-                    </div>
-                    <div class="card" style="flex:1;">
-                        <div class="card-header"><div class="card-title">维护工单</div></div>
-                        <div class="card-body"><div id="maint-order-area" class="order-box"><div class="placeholder">分析完成后将生成工单...</div></div></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ============ Tab: 智能问答 ============ -->
-            <div class="tab-content" id="tab-qa">
-                <div class="card" style="flex:1;">
-                    <div class="card-header"><div class="card-title">智能问答</div></div>
-                    <div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
-                        <div class="form-group">
-                            <label for="qa-question">问题</label>
-                            <textarea id="qa-question" rows="3" placeholder="输入您的技术问题..."></textarea>
-                        </div>
-                        <button id="btn-ask" class="btn btn-primary" disabled>提问</button>
-                        <div id="qa-answer" style="font-size:13px;line-height:1.8;color:var(--text-secondary);"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ============ Tab: 知识检索 ============ -->
-            <div class="tab-content" id="tab-search">
-                <div class="card" style="flex:1;max-width:800px;">
-                    <div class="card-header"><div class="card-title">知识检索</div></div>
-                    <div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
-                        <div style="display:flex;gap:8px;">
-                            <input type="search" id="search-query" placeholder="输入关键词搜索知识库..." style="flex:1;">
-                            <button id="btn-search" class="btn btn-primary" disabled>检索</button>
-                        </div>
-                        <div id="search-results"></div>
-                        <div id="search-history-list" style="font-size:12px;color:var(--text-tertiary);display:flex;gap:8px;flex-wrap:wrap;"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ============ Tab: 案例管理 ============ -->
-            <div class="tab-content" id="tab-case">
-                <div class="card" style="flex:1;">
-                    <div class="card-header"><div class="card-title">案例列表</div></div>
-                    <div class="card-body">
-                        <div style="display:flex;gap:8px;margin-bottom:12px;">
-                            <button class="btn btn-outline btn-sm active" onclick="loadCases()">全部</button>
-                            <button class="btn btn-outline btn-sm" onclick="loadCases('repair')">维修案例</button>
-                            <button class="btn btn-outline btn-sm" onclick="loadCases('maintenance')">维护案例</button>
-                        </div>
-                        <div id="case-list"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ============ Tab: 系统反馈 ============ -->
-            <div class="tab-content" id="tab-feedback">
-                <div class="card" style="flex:1;max-width:600px;">
-                    <div class="card-header"><div class="card-title">提交反馈</div></div>
-                    <div class="card-body feedback-form">
-                        <div class="form-group">
-                            <label for="feedback-type">反馈类型</label>
-                            <select id="feedback-type"><option value="bug">Bug 报告</option><option value="feature">功能建议</option><option value="other">其他</option></select>
-                        </div>
-                        <div class="form-group">
-                            <label for="feedback-context">使用场景</label>
-                            <input type="text" id="feedback-context" placeholder="故障诊断 / 日常维护 / 智能问答...">
-                        </div>
-                        <div class="form-group">
-                            <label for="feedback-issue">问题描述</label>
-                            <textarea id="feedback-issue" rows="4" placeholder="详细描述遇到的问题..."></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="feedback-correct">期望输出（可选）</label>
-                            <textarea id="feedback-correct" rows="2" placeholder="您期望的正确结果..."></textarea>
-                        </div>
-                        <button id="btn-submit-feedback" class="btn btn-primary">提交反馈</button>
-                        <div id="feedback-result"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ============ Tab: 系统统计 ============ -->
-            <div class="tab-content" id="tab-stats">
-                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:16px;">
-                    <div class="card"><div class="card-title">知识库条目</div><div style="font-size:28px;font-weight:700;color:var(--accent);" id="stat-kb-count">--</div></div>
-                    <div class="card"><div class="card-title">记忆记录</div><div style="font-size:28px;font-weight:700;color:var(--success);" id="stat-memory-count">--</div></div>
-                    <div class="card"><div class="card-title">诊断记录</div><div style="font-size:28px;font-weight:700;color:var(--warning);" id="stat-diagnosis-count">--</div></div>
-                    <div class="card"><div class="card-title">运行状态</div><div style="font-size:28px;font-weight:700;color:var(--success);" id="stat-run-status">运行中</div></div>
-                </div>
-
-                <div class="card" style="flex:1;">
-                    <div class="card-header"><div class="card-title">知识图谱</div><button class="btn btn-outline btn-sm" onclick="loadKnowledgeGraph()">刷新</button></div>
-                    <div class="card-body">
-                        <div class="viz-description"><p>QA 知识库章节与问答对关联图谱。绿色线=章节归属，蓝色虚线=跨章语义关联。</p></div>
-                        <div class="viz-container" id="kg-container" style="min-height:400px;"></div>
-                    </div>
-                </div>
-
-                <div class="card" style="flex:1;">
-                    <div class="card-header"><div class="card-title">向量空间</div><button class="btn btn-outline btn-sm" onclick="loadVectorSpace()">刷新</button></div>
-                    <div class="card-body">
-                        <div class="viz-description"><p>t-SNE 降维可视化，距离近的点语义相近。</p></div>
-                        <div class="viz-container" id="vs-container" style="min-height:350px;"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <!-- Logo 居中显示 -->
+    <div class="logo-banner">
+        <img src="/static/logo.png" alt="Logo" class="logo-banner-img">
     </div>
 
-    <!-- ==================== DETAIL MODAL ==================== -->
+    <!-- 顶部状态栏 -->
+    <header class="header">
+        <div class="header-content">
+            <div class="header-text">
+                <h1>保障智能助手</h1>
+                <p class="subtitle">基于 RAG + 知识图谱 + 多模态 LLM 的智能保障系统</p>
+            </div>
+        </div>
+        <div class="header-actions">
+            <a href="/dashboard" target="_blank" class="btn-dashboard">📊 数据大屏</a>
+            <div id="status-bar" class="status-bar status-loading">
+                ⏳ 正在初始化系统...
+            </div>
+        </div>
+    </header>
+
+    <!-- 主标签页 -->
+    <nav class="tabs">
+        <button class="tab active" data-tab="diagnosis">🔍 故障诊断</button>
+        <button class="tab" data-tab="maintenance">🔧 日常维护</button>
+        <button class="tab" data-tab="qa">💡 智能问答</button>
+        <button class="tab" data-tab="search">📚 知识检索</button>
+        <button class="tab" data-tab="case">📝 案例管理</button>
+        <button class="tab" data-tab="feedback">📮 系统反馈</button>
+        <button class="tab" data-tab="stats">📊 系统统计</button>
+    </nav>
+
+    <!-- Tab 1: 故障诊断 -->
+    <main id="tab-diagnosis" class="tab-content active">
+        <div class="diagnosis-layout">
+            <!-- 左侧：输入区域 -->
+            <aside class="input-panel">
+                <h2>📝 输入</h2>
+                <div class="form-group">
+                    <div class="input-header">
+                        <label for="fault-desc">故障描述</label>
+                        <button class="btn-demo-inline" onclick="fillDiagnosisDemo()">演示：填充示例</button>
+                    </div>
+                    <textarea id="fault-desc" rows="8" placeholder="例如：某型导弹在发射测试中制导系统信号丢失，无法锁定目标..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="fault-image">📷 上传照片（可选）</label>
+                    <input type="file" id="fault-image" accept="image/*">
+                    <div id="image-preview" class="image-preview hidden">
+                        <img id="preview-img" src="" alt="预览">
+                        <button id="remove-image" class="btn-remove">✕</button>
+                    </div>
+                </div>
+                <button id="btn-diagnose" class="btn btn-primary" disabled>🚀 开始诊断</button>
+            </aside>
+
+            <!-- 中间：推理过程 -->
+            <section class="cot-panel">
+                <h2>🧠 推理过程</h2>
+                <div id="cot-area" class="cot-box">
+                    <em class="placeholder">等待输入故障描述...</em>
+                </div>
+            </section>
+
+            <!-- 右侧：证据链 -->
+            <section class="evidence-panel">
+                <h2>📎 诊断依据</h2>
+                <div id="evidence-area" class="evidence-box">
+                    <em class="placeholder">诊断完成后将显示相关依据...</em>
+                </div>
+            </section>
+        </div>
+
+        <!-- 工单区域 -->
+        <section class="order-section">
+            <h2>📄 维修工单</h2>
+            <div id="order-area" class="order-card hidden">
+                <!-- 工单内容由 JS 动态填充 -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Tab 2: 日常维护 -->
+    <main id="tab-maintenance" class="tab-content">
+        <div class="diagnosis-layout">
+            <!-- 左侧：输入区域 -->
+            <aside class="input-panel">
+                <h2>📝 维护需求</h2>
+                <div class="form-group">
+                    <div class="input-header">
+                        <label for="maint-desc">维护描述</label>
+                        <button class="btn-demo-inline" onclick="fillMaintenanceDemo()">演示：填充示例</button>
+                    </div>
+                    <textarea id="maint-desc" rows="8" placeholder="例如：导弹弹翼舵机如何更换？"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="maint-image">📷 上传照片（可选）</label>
+                    <input type="file" id="maint-image" accept="image/*">
+                    <div id="maint-image-preview" class="image-preview hidden">
+                        <img id="maint-preview-img" src="" alt="预览">
+                        <button id="maint-remove-image" class="btn-remove">✕</button>
+                    </div>
+                </div>
+                <button id="btn-maintenance" class="btn btn-maintenance" disabled>🔧 生成维护方案</button>
+            </aside>
+
+            <!-- 中间：推理过程 -->
+            <section class="cot-panel">
+                <h2>🧠 推理过程</h2>
+                <div id="maint-cot-area" class="cot-box">
+                    <em class="placeholder">等待输入维护需求...</em>
+                </div>
+            </section>
+
+            <!-- 右侧：维护依据 -->
+            <section class="evidence-panel">
+                <h2>📎 维护依据</h2>
+                <div id="maint-evidence-area" class="evidence-box">
+                    <em class="placeholder">生成方案后将显示相关维护依据...</em>
+                </div>
+            </section>
+        </div>
+
+        <!-- 工单区域 -->
+        <section class="order-section">
+            <h2>📄 维护工单</h2>
+            <div id="maint-order-area" class="order-card hidden">
+                <!-- 工单内容由 JS 动态填充 -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Tab 3: 知识检索 -->
+    <main id="tab-search" class="tab-content">
+        <div class="search-layout">
+            <!-- 左侧：搜索区域 -->
+            <div class="search-main">
+                <h2>📚 检索保障知识库</h2>
+                <div class="search-form">
+                    <div class="input-header">
+                        <label for="search-query">搜索关键词</label>
+                        <button class="btn-demo-inline" onclick="fillSearchDemo()">演示：填充示例</button>
+                    </div>
+                    <input type="text" id="search-query" placeholder="例如：发动机推力下降原因、制导系统故障排除" />
+                    <button id="btn-search" class="btn btn-primary">🔍 检索</button>
+                </div>
+                <div id="search-results" class="search-results">
+                    <div class="search-placeholder">
+                        <span class="search-icon">🔍</span>
+                        <p>输入关键词开始检索知识库</p>
+                    </div>
+                </div>
+            </div>
+            <!-- 右侧：热门推荐 -->
+            <aside class="search-sidebar">
+                <div class="hot-search">
+                    <h3>🔥 热门搜索</h3>
+                    <div class="hot-tags">
+                        <span class="hot-tag" data-query="发动机推力下降">发动机推力下降</span>
+                        <span class="hot-tag" data-query="航电系统故障">航电系统故障</span>
+                        <span class="hot-tag" data-query="液压系统泄漏">液压系统泄漏</span>
+                        <span class="hot-tag" data-query="制导系统异常">制导系统异常</span>
+                        <span class="hot-tag" data-query="电气故障">电气故障</span>
+                        <span class="hot-tag" data-query="起落架故障">起落架故障</span>
+                        <span class="hot-tag" data-query="雷达系统故障">雷达系统故障</span>
+                        <span class="hot-tag" data-query="导弹发射故障">导弹发射故障</span>
+                    </div>
+                </div>
+                <div class="search-history">
+                    <h3>📋 检索历史</h3>
+                    <div id="search-history-list" class="history-list">
+                        <p class="empty-hint">暂无检索记录</p>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </main>
+
+    <!-- Tab 4: 智能问答 -->
+    <main id="tab-qa" class="tab-content">
+        <div class="qa-layout">
+            <!-- 左侧：输入区域 -->
+            <div class="qa-input-panel">
+                <h2>💡 智能问答</h2>
+                <p class="qa-desc">输入专业问题，系统将逐步解析关键词并深入解释</p>
+                <div class="qa-form">
+                    <div class="input-header">
+                        <label for="qa-question">问题</label>
+                        <button class="btn-demo-inline" onclick="fillQADemo()">演示：填充示例</button>
+                    </div>
+                    <textarea id="qa-question" rows="4" placeholder="例如：为什么低温下锂离子电池会导致能力下降？&#10;或：惯性导航原理是什么？"></textarea>
+                    <button id="btn-ask" class="btn btn-primary">💡 提问</button>
+                </div>
+                <div class="qa-examples">
+                    <h3>📝 示例问题</h3>
+                    <div class="qa-example-list">
+                        <span class="qa-example" data-question="为什么低温下锂离子电池会导致能力下降">为什么低温下锂离子电池会导致能力下降</span>
+                        <span class="qa-example" data-question="惯性导航原理是什么">惯性导航原理是什么</span>
+                        <span class="qa-example" data-question="雷达相控阵技术原理">雷达相控阵技术原理</span>
+                        <span class="qa-example" data-question="涡轮风扇发动机工作原理">涡轮风扇发动机工作原理</span>
+                        <span class="qa-example" data-question="导弹制导系统有哪些类型">导弹制导系统有哪些类型</span>
+                    </div>
+                </div>
+            </div>
+            <!-- 右侧：回答区域 -->
+            <div class="qa-answer-panel">
+                <h2>📋 解答</h2>
+                <div id="qa-answer" class="qa-answer-box">
+                    <em class="placeholder">输入问题后，系统将逐步解析并解答...</em>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Tab 5: 案例管理 -->
+    <main id="tab-case" class="tab-content">
+        <div class="case-layout">
+            <!-- 左侧：添加案例 -->
+            <div class="case-add-panel">
+                <h2>📝 添加案例</h2>
+                
+                <!-- 案例类型切换 -->
+                <div class="case-type-switch">
+                    <label class="case-type-label">
+                        <input type="radio" name="case-type" value="repair" checked>
+                        <span class="case-type-btn">🔧 维修案例</span>
+                    </label>
+                    <label class="case-type-label">
+                        <input type="radio" name="case-type" value="maintenance">
+                        <span class="case-type-btn">🛠️ 维护案例</span>
+                    </label>
+                </div>
+
+                <!-- ==================== 维修案例表单 ==================== -->
+                <div id="repair-form" class="case-form">
+                    <div class="case-templates">
+                        <h3>📋 快速模板</h3>
+                        <div class="template-buttons">
+                            <button class="btn-template" data-template="aircraft">✈️ 飞机维修</button>
+                            <button class="btn-template" data-template="engine">🔧 发动机故障</button>
+                            <button class="btn-template" data-template="missile">🚀 导弹故障</button>
+                            <button class="btn-template" data-template="custom">✏️ 自定义</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="repair-title">案例标题 *</label>
+                        <input type="text" id="repair-title" placeholder="例如：某型导弹制导系统信号丢失维修" />
+                    </div>
+                    <div class="form-group">
+                        <label for="repair-device-type">设备类型</label>
+                        <input type="text" id="repair-device-type" placeholder="例如：某型战机、某型导弹" />
+                    </div>
+                    <div class="form-group">
+                        <label for="repair-fault-symptom">故障现象</label>
+                        <textarea id="repair-fault-symptom" rows="2" placeholder="描述故障的具体表现..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="repair-fault-cause">故障原因</label>
+                        <textarea id="repair-fault-cause" rows="2" placeholder="分析故障的根本原因..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="repair-solution">维修方案</label>
+                        <textarea id="repair-solution" rows="3" placeholder="详细的维修步骤..."></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="repair-parts">使用备件</label>
+                            <input type="text" id="repair-parts" placeholder="例如：火花塞、油封" />
+                        </div>
+                        <div class="form-group">
+                            <label for="repair-technician">维修人员</label>
+                            <input type="text" id="repair-technician" placeholder="姓名" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="repair-notes">备注</label>
+                        <textarea id="repair-notes" rows="2" placeholder="其他补充信息..."></textarea>
+                    </div>
+                    <button id="btn-add-repair" class="btn btn-primary btn-repair">➕ 添加维修案例</button>
+                    <div id="repair-result" class="result-message"></div>
+                </div>
+
+                <!-- ==================== 维护案例表单 ==================== -->
+                <div id="maintenance-form" class="case-form hidden">
+                    <div class="case-templates">
+                        <h3>📋 快速模板</h3>
+                        <div class="template-buttons">
+                            <button class="btn-template" data-template="oil-change">🛢️ 更换滑油</button>
+                            <button class="btn-template" data-template="radar-check">📡 雷达维护</button>
+                            <button class="btn-template" data-template="missile-maint">🚀 导弹维护</button>
+                            <button class="btn-template" data-template="custom-maint">✏️ 自定义</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="maint-title">案例标题 *</label>
+                        <input type="text" id="maint-title" placeholder="例如：战机发动机滑油更换" />
+                    </div>
+                    <div class="form-group">
+                        <label for="maint-device-type">设备类型</label>
+                        <input type="text" id="maint-device-type" placeholder="例如：某型战机、某型导弹" />
+                    </div>
+                    <div class="form-group">
+                        <label for="maint-type">维护类型</label>
+                        <input type="text" id="maint-type" placeholder="例如：定期检查、更换、润滑、校准" />
+                    </div>
+                    <div class="form-group">
+                        <label for="maint-cycle">维护周期</label>
+                        <input type="text" id="maint-cycle" placeholder="例如：每500飞行小时" />
+                    </div>
+                    <div class="form-group">
+                        <label for="maint-standard">维护标准/规范</label>
+                        <input type="text" id="maint-standard" placeholder="参考的手册或规范" />
+                    </div>
+                    <div class="form-group">
+                        <label for="maint-solution">操作步骤</label>
+                        <textarea id="maint-solution" rows="3" placeholder="详细的维护操作步骤..."></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="maint-parts">使用备件/材料</label>
+                            <input type="text" id="maint-parts" placeholder="例如：滑油、润滑脂" />
+                        </div>
+                        <div class="form-group">
+                            <label for="maint-technician">维护人员</label>
+                            <input type="text" id="maint-technician" placeholder="姓名" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="maint-notes">备注</label>
+                        <textarea id="maint-notes" rows="2" placeholder="其他补充信息..."></textarea>
+                    </div>
+                    <button id="btn-add-maint" class="btn btn-primary btn-maintenance">➕ 添加维护案例</button>
+                    <div id="maint-result" class="result-message"></div>
+                </div>
+            </div>
+            <!-- 右侧：案例列表 -->
+            <div class="case-list-panel">
+                <h2>📚 已添加案例</h2>
+                <!-- 类型筛选标签 -->
+                <div class="case-filter-tabs">
+                    <button class="filter-tab active" data-filter="all">全部</button>
+                    <button class="filter-tab" data-filter="repair">🔧 维修</button>
+                    <button class="filter-tab" data-filter="maintenance">🛠️ 维护</button>
+                </div>
+                <div id="case-list" class="case-list">
+                    <div class="loading-placeholder">
+                        <span class="loading-icon">⏳</span>
+                        <p>加载中...</p>
+                    </div>
+                </div>
+                <!-- 分页 -->
+                <div id="case-pagination" class="pagination">
+                    <!-- 由 JS 动态填充 -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Tab 7: 系统反馈 -->
+    <main id="tab-feedback" class="tab-content">
+        <div class="feedback-layout">
+            <div class="feedback-panel">
+                <h2>📮 系统反馈</h2>
+                <p class="feedback-desc">帮助我们改进系统质量，您的反馈将用于优化大模型输出</p>
+                
+                <div class="feedback-form">
+                    <div class="form-group">
+                        <label for="feedback-type">反馈类型</label>
+                        <select id="feedback-type">
+                            <option value="diagnosis">故障诊断</option>
+                            <option value="maintenance">日常维护</option>
+                            <option value="qa">智能问答</option>
+                            <option value="search">知识检索</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="feedback-context">原始输入/问题</label>
+                        <textarea id="feedback-context" rows="3" placeholder="请输入当时的输入内容或问题..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="feedback-output">系统输出</label>
+                        <textarea id="feedback-output" rows="3" placeholder="请粘贴系统的输出内容..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="feedback-issue">问题描述</label>
+                        <textarea id="feedback-issue" rows="3" placeholder="请描述问题所在，例如：回答不准确、缺少关键信息、逻辑错误等..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="feedback-correct">正确答案（可选）</label>
+                        <textarea id="feedback-correct" rows="3" placeholder="如果您知道正确答案，请提供..."></textarea>
+                    </div>
+                    <button id="btn-submit-feedback" class="btn btn-primary">📤 提交反馈</button>
+                    <div id="feedback-result" class="result-message"></div>
+                </div>
+            </div>
+            
+            <!-- 反馈历史 -->
+            <div class="feedback-history-panel">
+                <h2>📋 反馈历史</h2>
+                <div id="feedback-list" class="feedback-list">
+                    <div class="loading-placeholder">
+                        <span class="loading-icon">📭</span>
+                        <p>暂无反馈记录</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Tab 8: 系统统计 -->
+    <main id="tab-stats" class="tab-content">
+        <h2>📊 系统运行状态</h2>
+        <!-- 状态卡片 -->
+        <div class="stats-cards">
+            <div class="stat-card">
+                <div class="stat-icon">📚</div>
+                <div class="stat-info">
+                    <div class="stat-label">知识库</div>
+                    <div class="stat-value" id="stat-kb-count">--</div>
+                    <div class="stat-desc">条记录</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🧠</div>
+                <div class="stat-info">
+                    <div class="stat-label">记忆系统</div>
+                    <div class="stat-value" id="stat-memory-count">--</div>
+                    <div class="stat-desc">条记忆</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📋</div>
+                <div class="stat-info">
+                    <div class="stat-label">诊断历史</div>
+                    <div class="stat-value" id="stat-diagnosis-count">--</div>
+                    <div class="stat-desc">次诊断</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⏱️</div>
+                <div class="stat-info">
+                    <div class="stat-label">运行状态</div>
+                    <div class="stat-value stat-status" id="stat-run-status">运行中</div>
+                    <div class="stat-desc" id="stat-session-id">--</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 组件状态 -->
+        <div class="components-section">
+            <h3>🔧 组件状态</h3>
+            <div id="components-list" class="components-grid">
+                <!-- 由 JS 动态填充 -->
+            </div>
+        </div>
+
+        <!-- 数据统计看板 -->
+        <div class="data-stats-section">
+            <h3>📊 数据资产看板</h3>
+            <div class="data-stats-grid">
+                <!-- 案例总数卡片 -->
+                <div class="data-stat-card">
+                    <div class="data-stat-header">📝 案例统计</div>
+                    <div class="data-stat-numbers">
+                        <div class="data-stat-num">
+                            <span class="num" id="data-total-cases">--</span>
+                            <span class="label">总案例</span>
+                        </div>
+                        <div class="data-stat-num repair">
+                            <span class="num" id="data-repair-cases">--</span>
+                            <span class="label">维修案例</span>
+                        </div>
+                        <div class="data-stat-num maintenance">
+                            <span class="num" id="data-maintenance-cases">--</span>
+                            <span class="label">维护案例</span>
+                        </div>
+                        <div class="data-stat-num feedback">
+                            <span class="num" id="data-feedback-count">--</span>
+                            <span class="label">用户反馈</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 设备类型分布 -->
+                <div class="data-stat-card">
+                    <div class="data-stat-header">🛩️ 设备类型分布</div>
+                    <div id="device-distribution-chart" class="chart-container">
+                        <div class="loading-placeholder"><span class="loading-icon">⏳</span></div>
+                    </div>
+                </div>
+                
+                <!-- 故障类型分布 -->
+                <div class="data-stat-card">
+                    <div class="data-stat-header">⚠️ 故障类型分布</div>
+                    <div id="fault-distribution-chart" class="chart-container">
+                        <div class="loading-placeholder"><span class="loading-icon">⏳</span></div>
+                    </div>
+                </div>
+                
+                <!-- 维护类型分布 -->
+                <div class="data-stat-card">
+                    <div class="data-stat-header">🔧 维护类型分布</div>
+                    <div id="maintenance-distribution-chart" class="chart-container">
+                        <div class="loading-placeholder"><span class="loading-icon">⏳</span></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 最近案例 -->
+            <div class="recent-cases-section">
+                <h4>📋 最近添加的案例</h4>
+                <div id="recent-cases-list" class="recent-cases-list">
+                    <div class="loading-placeholder"><span class="loading-icon">⏳</span></div>
+                </div>
+            </div>
+            
+            <button id="btn-refresh-data-stats" class="btn btn-outline" style="margin-top: 16px;">🔄 刷新数据</button>
+        </div>
+
+        <!-- 知识图谱可视化 -->
+        <div class="viz-section">
+            <h3> 知识图谱可视化</h3>
+            <div class="viz-panel active" id="viz-overview">
+                <div class="viz-description">
+                    <p>装备保障知识图谱：展示 QA 知识库、维修案例、航空维修记录之间的语义关联。</p>
+                    <p class="viz-hint"> 拖动节点可调整位置，滚轮缩放，悬停查看详情</p>
+                </div>
+                <div class="viz-container" id="kg-container"></div>
+                <button class="btn btn-outline btn-sm" onclick="loadKnowledgeGraph()"> 重新加载</button>
+            </div>
+        </div>
+
+        <!-- 向量空间可视化 -->
+        <div class="viz-section">
+            <h3>🎯 向量空间可视化</h3>
+            <div class="viz-description">
+                <p>每条航空维修记录经过 AI Embedding 模型转换为向量，再用 t-SNE 降维到 2D 平面绘制散点图。</p>
+                <ul>
+                    <li><strong>每个点</strong> = 一条维修记录</li>
+                    <li><strong>距离近的点</strong> = 语义相似的记录</li>
+                    <li><strong>颜色</strong> = 按数据来源分组（FAA/MaintNet）</li>
+                </ul>
+                <p class="viz-hint">💡 悬停点查看详情，滚轮缩放，拖动平移</p>
+            </div>
+            <div class="viz-stats" id="vs-stats"></div>
+            <div class="viz-container" id="vs-container"></div>
+            <button class="btn btn-outline btn-sm" onclick="loadVectorSpace()">🔄 重新加载</button>
+        </div>
+
+        <button id="btn-refresh-stats" class="btn btn-outline" style="margin-top: 16px;">🔄 刷新数据</button>
+    </main>
+
+    <!-- 通用详情模态框 -->
     <div id="detail-modal" class="modal-overlay hidden">
         <div class="modal-container">
             <div class="modal-header">
                 <h3 id="modal-title" class="modal-title">详情</h3>
-                <button id="modal-close" class="modal-close-btn">&times;</button>
+                <button id="modal-close" class="modal-close-btn">✕</button>
             </div>
-            <div id="modal-content" class="modal-body"></div>
+            <div id="modal-content" class="modal-body">
+                <!-- 内容由 JS 动态填充 -->
+            </div>
         </div>
     </div>
 
