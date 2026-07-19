@@ -1505,16 +1505,8 @@ async function loadKnowledgeGraph() {
             return;
         }
         
-        const { nodes, links, stats } = result.data;
-        
-        // 显示统计信息
-        statsDiv.innerHTML = `
-            <strong>📊 统计:</strong> 
-            ${stats.aircraft} 飞机型号 | ${stats.incidents} 事故类型 | ${stats.manufacturers} 制造商 | 
-            ${stats.total_links} 关系 | ${stats.total_nodes} 节点
-        `;
-        
-        // 渲染图谱
+        const { nodes, links } = result.data;
+
         renderKnowledgeGraph(container, nodes, links);
         
     } catch (error) {
@@ -1529,11 +1521,15 @@ function renderKnowledgeGraph(container, nodes, links) {
     const width = container.clientWidth || 900;
     const height = 500;
     
-    // 颜色映射 (航空领域)
+    // 颜色映射
     const colorMap = {
-        'Aircraft': '#f87171',     // 红色 - 飞机型号
-        'Incident': '#fbbf24',     // 黄色 - 事故类型
-        'Manufacturer': '#4ade80', // 绿色 - 制造商
+        'Aircraft': '#f87171',
+        'Manufacturer': '#f59e0b',
+        'IncidentType': '#ef4444',
+        'Location': '#a78bfa',
+        'QAChapter': '#34d399',
+        'QAPair': '#10b981',
+        'AviationRecord': '#64748b',
     };
     
     // 创建SVG
@@ -1570,10 +1566,10 @@ function renderKnowledgeGraph(container, nodes, links) {
     
     // 创建力导向模拟
     kgSimulation = d3.forceSimulation(nodes)
-        .force('link', d3.forceLink(links).id(d => d.id).distance(150))
-        .force('charge', d3.forceManyBody().strength(-500))
+        .force('link', d3.forceLink(links).id(d => d.id).distance(80))
+        .force('charge', d3.forceManyBody().strength(-200))
         .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('collision', d3.forceCollide().radius(40));
+        .force('collision', d3.forceCollide().radius(d => (radiusScale[d.type] || 10) + 8));
     
     // 绘制边
     const link = g.append('g')
@@ -1597,8 +1593,18 @@ function renderKnowledgeGraph(container, nodes, links) {
             .on('end', dragEnded));
     
     // 节点圆形 - 统一大小
+    const radiusScale = {
+        'QAChapter': 16,
+        'Aircraft': 14,
+        'Manufacturer': 12,
+        'IncidentType': 11,
+        'Location': 10,
+        'QAPair': 7,
+        'AviationRecord': 6,
+    };
+
     node.append('circle')
-        .attr('r', 20)
+        .attr('r', d => radiusScale[d.type] || 10)
         .attr('fill', d => colorMap[d.type] || '#94a3b8')
         .attr('stroke', '#334155')
         .attr('stroke-width', 1.5);
@@ -1655,331 +1661,11 @@ function renderKnowledgeGraph(container, nodes, links) {
     });
 }
 
-// ==================== 知识图谱标签页切换 ====================
+// 知识图谱标签页已移除，保留函数签名以防引用错误
+function initVizTabs() {}
 
-function initVizTabs() {
-    document.querySelectorAll('.viz-tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-            const vizName = tab.dataset.viz;
-            
-            // 更新标签按钮状态
-            document.querySelectorAll('.viz-tab').forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            
-            // 更新面板显示
-            document.querySelectorAll('.viz-panel').forEach(p => p.classList.remove('active'));
-            document.getElementById(`viz-${vizName}`).classList.add('active');
-            
-            // 首次展开时加载数据
-            const panel = document.getElementById(`viz-${vizName}`);
-            if (!panel.dataset.loaded) {
-                switch(vizName) {
-                    case 'overview': loadKnowledgeGraph(); break;
-                    case 'aircraft': loadAircraftView(); break;
-                    case 'incident': loadIncidentView(); break;
-                    case 'manufacturer': loadManufacturerView(); break;
-                    case 'heatmap': loadHeatmapView(); break;
-                }
-                panel.dataset.loaded = 'true';
-            }
-        });
-    });
-}
+// ==================== 向量空间可视化 ====================
 
-// ==================== 飞机型号视图 ====================
-
-async function loadAircraftView() {
-    const container = document.getElementById('kg-aircraft-container');
-    container.innerHTML = '<div class="viz-loading"><div class="viz-loading-spinner"></div><p>正在加载...</p></div>';
-    
-    try {
-        const response = await fetch('/api/stats/knowledge-graph');
-        const result = await response.json();
-        
-        if (!result.success || !result.data.nodes.length) {
-            container.innerHTML = '<div class="viz-empty"><div class="viz-empty-icon">📭</div><div class="viz-empty-text">暂无数据</div></div>';
-            return;
-        }
-        
-        const { nodes, links } = result.data;
-        const aircraftNodes = nodes.filter(n => n.type === 'Aircraft');
-        
-        // 按连接数排序
-        aircraftNodes.sort((a, b) => {
-            const aLinks = links.filter(l => l.source === a.id || l.target === a.id).length;
-            const bLinks = links.filter(l => l.source === b.id || l.target === b.id).length;
-            return bLinks - aLinks;
-        });
-        
-        // 渲染柱状图
-        renderBarChart(container, aircraftNodes.map(n => ({
-            label: n.label,
-            value: links.filter(l => l.source === n.id || l.target === n.id).length
-        })), '飞机型号', '关联数量', '#f87171');
-        
-    } catch (error) {
-        container.innerHTML = `<div class="viz-empty"><div class="viz-empty-icon">❌</div><div class="viz-empty-text">加载失败: ${error.message}</div></div>`;
-    }
-}
-
-// ==================== 事故类型视图 ====================
-
-async function loadIncidentView() {
-    const container = document.getElementById('kg-incident-container');
-    container.innerHTML = '<div class="viz-loading"><div class="viz-loading-spinner"></div><p>正在加载...</p></div>';
-    
-    try {
-        const response = await fetch('/api/stats/knowledge-graph');
-        const result = await response.json();
-        
-        if (!result.success || !result.data.nodes.length) {
-            container.innerHTML = '<div class="viz-empty"><div class="viz-empty-icon">📭</div><div class="viz-empty-text">暂无数据</div></div>';
-            return;
-        }
-        
-        const { nodes, links } = result.data;
-        const incidentNodes = nodes.filter(n => n.type === 'Incident');
-        
-        // 按连接数排序
-        incidentNodes.sort((a, b) => {
-            const aLinks = links.filter(l => l.source === a.id || l.target === a.id).length;
-            const bLinks = links.filter(l => l.source === b.id || l.target === b.id).length;
-            return bLinks - aLinks;
-        });
-        
-        // 渲染柱状图
-        renderBarChart(container, incidentNodes.map(n => ({
-            label: n.label,
-            value: links.filter(l => l.source === n.id || l.target === n.id).length
-        })), '事故类型', '关联数量', '#fbbf24');
-        
-    } catch (error) {
-        container.innerHTML = `<div class="viz-empty"><div class="viz-empty-icon">❌</div><div class="viz-empty-text">加载失败: ${error.message}</div></div>`;
-    }
-}
-
-// ==================== 制造商视图 ====================
-
-async function loadManufacturerView() {
-    const container = document.getElementById('kg-manufacturer-container');
-    container.innerHTML = '<div class="viz-loading"><div class="viz-loading-spinner"></div><p>正在加载...</p></div>';
-    
-    try {
-        const response = await fetch('/api/stats/knowledge-graph');
-        const result = await response.json();
-        
-        if (!result.success || !result.data.nodes.length) {
-            container.innerHTML = '<div class="viz-empty"><div class="viz-empty-icon">📭</div><div class="viz-empty-text">暂无数据</div></div>';
-            return;
-        }
-        
-        const { nodes, links } = result.data;
-        const mfgNodes = nodes.filter(n => n.type === 'Manufacturer');
-        
-        // 按连接数排序
-        mfgNodes.sort((a, b) => {
-            const aLinks = links.filter(l => l.source === a.id || l.target === a.id).length;
-            const bLinks = links.filter(l => l.source === b.id || l.target === b.id).length;
-            return bLinks - aLinks;
-        });
-        
-        // 渲染柱状图
-        renderBarChart(container, mfgNodes.map(n => ({
-            label: n.label,
-            value: links.filter(l => l.source === n.id || l.target === n.id).length
-        })), '制造商', '关联数量', '#4ade80');
-        
-    } catch (error) {
-        container.innerHTML = `<div class="viz-empty"><div class="viz-empty-icon">❌</div><div class="viz-empty-text">加载失败: ${error.message}</div></div>`;
-    }
-}
-
-// ==================== 热力图视图 ====================
-
-async function loadHeatmapView() {
-    const container = document.getElementById('kg-heatmap-container');
-    container.innerHTML = '<div class="viz-loading"><div class="viz-loading-spinner"></div><p>正在加载...</p></div>';
-    
-    try {
-        const response = await fetch('/api/stats/knowledge-graph');
-        const result = await response.json();
-        
-        if (!result.success || !result.data.nodes.length) {
-            container.innerHTML = '<div class="viz-empty"><div class="viz-empty-icon">📭</div><div class="viz-empty-text">暂无数据</div></div>';
-            return;
-        }
-        
-        const { nodes, links } = result.data;
-        const aircraftNodes = nodes.filter(n => n.type === 'Aircraft').slice(0, 10);
-        const incidentNodes = nodes.filter(n => n.type === 'Incident').slice(0, 8);
-        
-        // 构建热力图数据
-        const heatmapData = [];
-        aircraftNodes.forEach(a => {
-            incidentNodes.forEach(inc => {
-                const count = links.filter(l => 
-                    (l.source === a.id && l.target === inc.id) || 
-                    (l.source === inc.id && l.target === a.id)
-                ).length;
-                heatmapData.push({
-                    x: a.label,
-                    y: inc.label,
-                    value: count
-                });
-            });
-        });
-        
-        // 渲染热力图
-        renderHeatmap(container, heatmapData, aircraftNodes.map(n => n.label), incidentNodes.map(n => n.label));
-        
-    } catch (error) {
-        container.innerHTML = `<div class="viz-empty"><div class="viz-empty-icon">❌</div><div class="viz-empty-text">加载失败: ${error.message}</div></div>`;
-    }
-}
-
-// ==================== 渲染工具函数 ====================
-
-function renderBarChart(container, data, xLabel, yLabel, color) {
-    container.innerHTML = '';
-    
-    if (data.length === 0) {
-        container.innerHTML = '<div class="viz-empty"><div class="viz-empty-icon">📭</div><div class="viz-empty-text">暂无数据</div></div>';
-        return;
-    }
-    
-    const width = container.clientWidth || 800;
-    const height = 400;
-    const margin = { top: 30, right: 30, bottom: 100, left: 60 };
-    const innerWidth = width - margin.left - margin.right;
-    const innerHeight = height - margin.top - margin.bottom;
-    
-    const svg = d3.select(container)
-        .append('svg')
-        .attr('width', width)
-        .attr('height', height);
-    
-    const g = svg.append('g')
-        .attr('transform', `translate(${margin.left},${margin.top})`);
-    
-    // X轴
-    const x = d3.scaleBand()
-        .domain(data.map(d => d.label))
-        .range([0, innerWidth])
-        .padding(0.2);
-    
-    g.append('g')
-        .attr('transform', `translate(0,${innerHeight})`)
-        .call(d3.axisBottom(x))
-        .selectAll('text')
-        .attr('transform', 'rotate(-45)')
-        .style('text-anchor', 'end')
-        .attr('font-size', '11px');
-    
-    // Y轴
-    const y = d3.scaleLinear()
-        .domain([0, d3.max(data, d => d.value)])
-        .range([innerHeight, 0]);
-    
-    g.append('g')
-        .call(d3.axisLeft(y));
-    
-    // 柱子
-    g.selectAll('rect')
-        .data(data)
-        .join('rect')
-        .attr('x', d => x(d.label))
-        .attr('y', d => y(d.value))
-        .attr('width', x.bandwidth())
-        .attr('height', d => innerHeight - y(d.value))
-        .attr('fill', color)
-        .attr('rx', 4)
-        .append('title')
-        .text(d => `${d.label}: ${d.value}`);
-    
-    // 数值标签
-    g.selectAll('.value-label')
-        .data(data)
-        .join('text')
-        .attr('class', 'value-label')
-        .attr('x', d => x(d.label) + x.bandwidth() / 2)
-        .attr('y', d => y(d.value) - 5)
-        .attr('text-anchor', 'middle')
-        .attr('font-size', '11px')
-        .attr('fill', '#475569')
-        .text(d => d.value);
-}
-
-function renderHeatmap(container, data, xLabels, yLabels) {
-    container.innerHTML = '';
-    
-    const width = container.clientWidth || 800;
-    const height = 400;
-    const margin = { top: 30, right: 30, bottom: 100, left: 120 };
-    const innerWidth = width - margin.left - margin.right;
-    const innerHeight = height - margin.top - margin.bottom;
-    
-    const svg = d3.select(container)
-        .append('svg')
-        .attr('width', width)
-        .attr('height', height);
-    
-    const g = svg.append('g')
-        .attr('transform', `translate(${margin.left},${margin.top})`);
-    
-    // X轴
-    const x = d3.scaleBand()
-        .domain(xLabels)
-        .range([0, innerWidth])
-        .padding(0.05);
-    
-    g.append('g')
-        .attr('transform', `translate(0,${innerHeight})`)
-        .call(d3.axisBottom(x))
-        .selectAll('text')
-        .attr('transform', 'rotate(-45)')
-        .style('text-anchor', 'end')
-        .attr('font-size', '11px');
-    
-    // Y轴
-    const y = d3.scaleBand()
-        .domain(yLabels)
-        .range([0, innerHeight])
-        .padding(0.05);
-    
-    g.append('g')
-        .call(d3.axisLeft(y));
-    
-    // 颜色比例
-    const maxVal = d3.max(data, d => d.value) || 1;
-    const colorScale = d3.scaleSequential(d3.interpolateYlOrRd)
-        .domain([0, maxVal]);
-    
-    // 热力图格子
-    g.selectAll('rect')
-        .data(data)
-        .join('rect')
-        .attr('x', d => x(d.x))
-        .attr('y', d => y(d.y))
-        .attr('width', x.bandwidth())
-        .attr('height', y.bandwidth())
-        .attr('fill', d => d.value > 0 ? colorScale(d.value) : '#f1f5f9')
-        .attr('rx', 2)
-        .append('title')
-        .text(d => `${d.x} × ${d.y}: ${d.value}`);
-    
-    // 数值标签
-    g.selectAll('.cell-label')
-        .data(data.filter(d => d.value > 0))
-        .join('text')
-        .attr('class', 'cell-label')
-        .attr('x', d => x(d.x) + x.bandwidth() / 2)
-        .attr('y', d => y(d.y) + y.bandwidth() / 2)
-        .attr('text-anchor', 'middle')
-        .attr('dominant-baseline', 'middle')
-        .attr('font-size', '11px')
-        .attr('fill', d => d.value > maxVal / 2 ? 'white' : '#334155')
-        .text(d => d.value);
-}
 
 // ==================== 向量空间可视化 ====================
 
