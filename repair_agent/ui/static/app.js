@@ -1511,14 +1511,17 @@ async function loadKnowledgeGraph() {
         const qaPerChapter = {};
         const filteredNodes = nodes.filter(n => {
             if (n.type !== 'QAPair') return true;
-            const chId = links.find(l => l.source === n.id && l.type === 'BELONGS_TO')?.target
-                      || links.find(l => l.target === n.id && l.type === 'BELONGS_TO')?.source;
+            const chId = links.find(l => l.type === 'BELONGS_TO' && l.target === n.id)?.source
+                      || links.find(l => l.type === 'BELONGS_TO' && l.source === n.id)?.target;
             if (!chId) return false;
             qaPerChapter[chId] = (qaPerChapter[chId] || 0) + 1;
             return qaPerChapter[chId] <= 2;
         });
 
-        renderKnowledgeGraph(container, filteredNodes, links);
+        const nodeIds = new Set(filteredNodes.map(n => n.id));
+        const filteredLinks = links.filter(l => nodeIds.has(l.source) && nodeIds.has(l.target));
+
+        renderKnowledgeGraph(container, filteredNodes, filteredLinks);
         
     } catch (error) {
         container.innerHTML = `<div class="viz-empty"><div class="viz-empty-icon">❌</div><div class="viz-empty-text">加载失败: ${error.message}</div></div>`;
