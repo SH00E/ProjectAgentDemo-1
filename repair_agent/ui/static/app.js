@@ -10,7 +10,9 @@ const state = {
     currentSource: null,
     analysisText: '',
     solutionText: '',
-    searchHistory: []
+    searchHistory: [],
+    neo4jResults: [],
+    currentMode: 'diagnosis'
 };
 
 // ==================== DOM 元素 ====================
@@ -212,6 +214,8 @@ async function startDiagnosis() {
     }
 
     state.isDiagnosing = true;
+    state.currentMode = 'diagnosis';
+    state.neo4jResults = [];
     state.analysisText = '';
     state.solutionText = '';
     window._evidenceData = [];
@@ -370,7 +374,80 @@ function handleNeo4j(data) {
         if (evidenceArea) {
             evidenceArea.innerHTML = html;
         }
+
+        // Mini 知识图谱更新
+        const qaResults = data.results.filter(r => r.type === 'QAPair' || (r.answer));
+        if (qaResults.length > 0) {
+            state.neo4jResults = state.neo4jResults.concat(qaResults);
+            renderMiniKG();
+        }
     }
+}
+
+function renderMiniKG() {
+    const containerId = state.currentMode === 'maintenance' ? 'maint-kg-mini' : 'kg-mini';
+    const container = document.getElementById(containerId);
+    if (!container?.parentElement) return;
+    const wrapper = container.parentElement;
+
+    if (!state.neo4jResults.length) { wrapper.classList.remove('visible'); return; }
+    wrapper.classList.add('visible');
+    container.innerHTML = '';
+
+    const groups = {};
+    state.neo4jResults.forEach(r => {
+        const ch = r.chapter || '其他';
+        if (!groups[ch]) groups[ch] = [];
+        if (!groups[ch].find(q => q.qa_no === r.qa_no)) {
+            groups[ch].push({ qa_no: r.qa_no, question: r.name, chapter: ch });
+        }
+    });
+
+    const entries = Object.entries(groups);
+    if (!entries.length) return;
+    const ent = entries.slice(0, 4); // max 4 chapters wide
+
+    const W = container.clientWidth || 280;
+    const H = 160;
+    const colW = (W - 20) / ent.length;
+
+    const svg = d3.select(container).append('svg').attr('viewBox', [0, 0, W, H]);
+
+    ent.forEach(([chapter, qas], gi) => {
+        const cx = 10 + colW * gi + colW / 2;
+        const cy = 36;
+
+        // 章节节点 (圆角矩形)
+        svg.append('rect')
+            .attr('x', cx - 45).attr('y', cy - 10).attr('width', 90).attr('height', 22)
+            .attr('rx', 6).attr('fill', '#dbeafe').attr('stroke', '#93c5fd');
+
+        svg.append('text').attr('x', cx).attr('y', cy + 5)
+            .attr('text-anchor', 'middle').attr('font-size', '10px')
+            .attr('fill', '#1e40af').attr('font-weight', '600')
+            .text(chapter.length > 8 ? chapter.substring(0, 8) + '…' : chapter);
+
+        // QA 子节点
+        qas.slice(0, 3).forEach((qa, qi) => {
+            const qx = cx + (qi - Math.min(qas.length - 1, 1) * 0.5) * 34;
+            const qy = cy + 52;
+
+            svg.append('line').attr('x1', cx).attr('y1', cy + 12)
+                .attr('x2', qx).attr('y2', qy - 8)
+                .attr('stroke', '#cbd5e1').attr('stroke-width', 1);
+
+            svg.append('rect').attr('x', qx - 48).attr('y', qy - 8)
+                .attr('width', 96).attr('height', 18).attr('rx', 4)
+                .attr('fill', '#d1fae5').attr('stroke', '#a7f3d0');
+
+            svg.append('text').attr('x', qx).attr('y', qy + 5)
+                .attr('text-anchor', 'middle').attr('font-size', '9px')
+                .attr('fill', '#065f46')
+                .text(qa.question.length > 12 ? qa.question.substring(0, 12) + '…' : qa.question);
+
+            svg.append('title').text(qa.question);
+        });
+    });
 }
 
 function handleRAG(data) {
@@ -2055,6 +2132,8 @@ async function startMaintenance() {
     }
 
     maintenanceState.isProcessing = true;
+    state.currentMode = 'maintenance';
+    state.neo4jResults = [];
     maintenanceState.analysisText = '';
     maintenanceState.solutionText = '';
     window._maintenanceEvidenceData = [];
@@ -2173,6 +2252,12 @@ function handleMaintenanceNeo4j(data) {
         });
         html += '</div>';
         elements.maintEvidenceArea.innerHTML = html;
+
+        const qaData = data.results.filter(r => r.type === 'QAPair' || r.answer);
+        if (qaData.length > 0) {
+            state.neo4jResults = state.neo4jResults.concat(qaData);
+            renderMiniKG();
+        }
     }
 }
 

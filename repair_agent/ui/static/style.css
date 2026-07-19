@@ -2639,3 +2639,56 @@ textarea {
         width: 100%;
     }
 }
+
+/* ==================== 诊断页 Mini 知识图谱 ==================== */
+
+.kg-mini-container {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    max-height: 220px;
+    overflow: hidden;
+    display: none;
+}
+
+.kg-mini-container.visible { display: block; }
+
+.kg-mini-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+#kg-mini, #maint-kg-mini { width: 100%; height: 160px; }
+
+.kg-mini svg { width: 100%; height: 100%; }
+
+.kg-mini-node circle { stroke-width: 1.5; }
+
+.kg-mini-node.chapter circle { fill: #3b82f6; stroke: #2563eb; }
+
+.kg-mini-node.qa circle { fill: #10b981; stroke: #059669; }
+
+.kg-mini-link { stroke: #cbd5e1; stroke-width: 1.2; fill: none; }
+
+.kg-mini-label {
+    font-size: 10px;
+    fill: #475569;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.kg-mini-label.chapter { font-weight: 600; fill: #1e40af; }
+
+.kg-mini-label.qa { fill: #065f46; }
+
+.kg-mini-hint {
+    font-size: 10px;
+    color: #94a3b8;
+    text-align: center;
+    margin-top: 4px;
+}
