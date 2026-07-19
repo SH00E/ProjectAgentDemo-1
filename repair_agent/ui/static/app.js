@@ -1532,6 +1532,16 @@ function renderKnowledgeGraph(container, nodes, links) {
         'AviationRecord': '#64748b',
     };
     
+    const radiusScale = {
+        'QAChapter': 16,
+        'Aircraft': 14,
+        'Manufacturer': 12,
+        'IncidentType': 11,
+        'Location': 10,
+        'QAPair': 7,
+        'AviationRecord': 6,
+    };
+
     // 创建SVG
     const svg = d3.select(container)
         .append('svg')
@@ -1592,17 +1602,6 @@ function renderKnowledgeGraph(container, nodes, links) {
             .on('drag', dragged)
             .on('end', dragEnded));
     
-    // 节点圆形 - 统一大小
-    const radiusScale = {
-        'QAChapter': 16,
-        'Aircraft': 14,
-        'Manufacturer': 12,
-        'IncidentType': 11,
-        'Location': 10,
-        'QAPair': 7,
-        'AviationRecord': 6,
-    };
-
     node.append('circle')
         .attr('r', d => radiusScale[d.type] || 10)
         .attr('fill', d => colorMap[d.type] || '#94a3b8')

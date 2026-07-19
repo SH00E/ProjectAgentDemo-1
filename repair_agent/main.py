@@ -215,7 +215,8 @@ def main():
         print("=" * 60)
         
     elif args.mode == "test":
-        # 命令行测试
+        # 命令
+        # 行测试
         test_diagnosis()
         
     elif args.mode == "knowledge":
