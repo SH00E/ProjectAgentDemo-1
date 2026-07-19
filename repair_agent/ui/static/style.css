@@ -205,8 +205,8 @@ body {
 
 .tab-content { display: none; flex: 1; }
 .tab-content.active { display: flex; flex-direction: column; }
-#tab-diagnosis.active { display: grid; grid-template-columns: 380px 1fr 340px; grid-template-rows: 1fr; gap: 16px; }
-#tab-maintenance.active { display: grid; grid-template-columns: 380px 1fr 340px; grid-template-rows: 1fr; gap: 16px; }
+#tab-diagnosis.active { display: grid; grid-template-columns: 360px 1fr 1fr; grid-template-rows: 1fr; gap: 16px; }
+#tab-maintenance.active { display: grid; grid-template-columns: 360px 1fr 1fr; grid-template-rows: 1fr; gap: 16px; }
 
 /* ==================== CARDS ==================== */
 
