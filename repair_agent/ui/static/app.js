@@ -2883,6 +2883,84 @@ function closeDetailModal() {
     document.body.style.overflow = ''; // 恢复滚动
 }
 
+// ==================== 知识库/案例弹窗 ====================
+
+async function showKbModal() {
+    const modal = elements.detailModal;
+    elements.modalTitle.textContent = '知识库详情';
+    elements.modalContent.innerHTML = '<div class="viz-loading"><div class="viz-loading-spinner"></div><p>加载中...</p></div>';
+    modal.classList.remove('hidden');
+    modal.onclick = (e) => { if (e.target === modal) modal.classList.add('hidden'); };
+
+    try {
+        const resp = await fetch('/api/stats/knowledge-graph');
+        const kg = await resp.json();
+        if (!kg.success || !kg.data.nodes.length) {
+            elements.modalContent.innerHTML = '<p>暂无数据</p>';
+            return;
+        }
+
+        const qaNodes = kg.data.nodes.filter(n => n.type === 'QAPair');
+        const groups = {};
+        qaNodes.forEach(n => {
+            const ch = n.label || '未知';
+            if (!groups[ch]) groups[ch] = [];
+            groups[ch].push(n);
+        });
+
+        let html = `<div style="font-size:13px;color:#64748b;margin-bottom:12px;">共 ${qaNodes.length} 个 QA 对</div>`;
+        Object.entries(groups).forEach(([ch, qas]) => {
+            html += `<div style="margin-bottom:10px;padding:10px;background:#f8fafc;border-radius:6px;">`;
+            html += `<div style="font-weight:600;font-size:13px;color:#1e40af;margin-bottom:6px;">${escapeHtml(ch)}</div>`;
+            qas.forEach(q => {
+                html += `<div style="font-size:13px;color:#475569;padding:4px 0;border-bottom:1px solid #e2e8f0;">${escapeHtml(q.label)}</div>`;
+            });
+            html += '</div>';
+        });
+        elements.modalContent.innerHTML = html;
+    } catch (e) {
+        elements.modalContent.innerHTML = '<p>加载失败</p>';
+    }
+}
+
+async function showCaseListModal() {
+    const modal = elements.detailModal;
+    elements.modalTitle.textContent = '案例列表';
+    elements.modalContent.innerHTML = '<div class="viz-loading"><div class="viz-loading-spinner"></div><p>加载中...</p></div>';
+    modal.classList.remove('hidden');
+    modal.onclick = (e) => { if (e.target === modal) modal.classList.add('hidden'); };
+
+    try {
+        const resp = await fetch('/api/cases?page_size=50');
+        const data = await resp.json();
+        if (!data.success || !data.cases.length) {
+            elements.modalContent.innerHTML = '<p>暂无案例</p>';
+            return;
+        }
+
+        let html = `<div style="font-size:13px;color:#64748b;margin-bottom:12px;">共 ${data.total} 个案例</div>`;
+        data.cases.forEach(c => {
+            const typeLabel = c.case_type === 'repair' ? '故障' : '维护';
+            const typeColor = c.case_type === 'repair' ? '#3b82f6' : '#10b981';
+            const tc = c.case_type === 'repair' ? 'repair' : 'maintenance';
+            html += `
+                <div style="padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:8px;cursor:pointer;transition:all .2s;"
+                     onclick="showCaseDetail(${JSON.stringify(c).replace(/"/g, '&quot;')})">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                        <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:${typeColor === '#3b82f6' ? '#dbeafe' : '#d1fae5'};color:${typeColor};">${typeLabel}</span>
+                        <span style="font-size:11px;color:#94a3b8;">${(c.created_at||'').substring(0,10)}</span>
+                    </div>
+                    <div style="font-weight:600;font-size:14px;color:#1a1d2e;margin-top:6px;">${escapeHtml(c.title || '未命名案例')}</div>
+                    <div style="font-size:12px;color:#94a3b8;margin-top:4px;">${escapeHtml(c.device_type || '')}</div>
+                </div>
+            `;
+        });
+        elements.modalContent.innerHTML = html;
+    } catch (e) {
+        elements.modalContent.innerHTML = '<p>加载失败</p>';
+    }
+}
+
 // 证据项点击展开详情
 function showEvidenceDetail(data) {
     const title = data.title || '详情';
