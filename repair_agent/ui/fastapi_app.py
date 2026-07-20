@@ -934,11 +934,17 @@ async def get_knowledge_graph():
                     MATCH (q:QAPair)-[:BELONGS_TO]->(ch:QAChapter)
                     WITH q, ch.chapter_no AS ch_id
                     ORDER BY q.qa_no
-                    RETURN q.qa_no AS id, q.question AS label, ch_id
+                    RETURN q.qa_no AS id, q.question AS label, q.answer AS answer, ch_id, q.chapter_name AS chapter_name
                 """):
                     key = f"QAPair_{r['id']}"
                     if key not in node_set:
-                        nodes.append({"id": key, "type": "QAPair", "label": r["label"][:50], "group": "qa"})
+                        nodes.append({
+                            "id": key, "type": "QAPair",
+                            "label": r["label"][:60],
+                            "answer": r["answer"][:200],
+                            "chapter_name": r["chapter_name"],
+                            "group": "qa"
+                        })
                         node_set.add(key)
                         links.append({"source": key, "target": f"QAChapter_{r['ch_id']}", "type": "BELONGS_TO"})
 

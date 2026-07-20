@@ -2902,18 +2902,32 @@ async function showKbModal() {
 
         const qaNodes = kg.data.nodes.filter(n => n.type === 'QAPair');
         const groups = {};
+        // 按章节分组，去重
+        const seen = new Set();
         qaNodes.forEach(n => {
-            const ch = n.label || '未知';
+            if (seen.has(n.id)) return;
+            seen.add(n.id);
+            const ch = n.chapter_name || '其他';
             if (!groups[ch]) groups[ch] = [];
             groups[ch].push(n);
         });
 
-        let html = `<div style="font-size:13px;color:#64748b;margin-bottom:12px;">共 ${qaNodes.length} 个 QA 对</div>`;
+        let html = `<div style="font-size:13px;color:#64748b;margin-bottom:12px;">共 ${seen.size} 个 QA 对</div>`;
         Object.entries(groups).forEach(([ch, qas]) => {
-            html += `<div style="margin-bottom:10px;padding:10px;background:#f8fafc;border-radius:6px;">`;
-            html += `<div style="font-weight:600;font-size:13px;color:#1e40af;margin-bottom:6px;">${escapeHtml(ch)}</div>`;
+            html += `<div style="margin-bottom:12px;padding:12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">`;
+            html += `<div style="font-weight:600;font-size:14px;color:#1e40af;margin-bottom:8px;">${escapeHtml(ch)}</div>`;
             qas.forEach(q => {
-                html += `<div style="font-size:13px;color:#475569;padding:4px 0;border-bottom:1px solid #e2e8f0;">${escapeHtml(q.label)}</div>`;
+                const ans = q.answer || '';
+                html += `
+                    <div style="margin-bottom:8px;padding:8px 10px;background:#fff;border-radius:6px;border:1px solid #e2e8f0;">
+                        <div style="font-size:13px;font-weight:500;color:#1a1d2e;margin-bottom:4px;">
+                            <span style="color:#3b82f6;">Q:</span> ${escapeHtml(q.label)}
+                        </div>
+                        <div style="font-size:13px;color:#475569;line-height:1.6;">
+                            <span style="color:#10b981;">A:</span> ${escapeHtml(ans)}
+                        </div>
+                    </div>
+                `;
             });
             html += '</div>';
         });
