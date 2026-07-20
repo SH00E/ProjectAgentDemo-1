@@ -1584,7 +1584,7 @@ async function loadKnowledgeGraph() {
         
         const { nodes, links } = result.data;
 
-        // 限制每章最多显示 2 个 QAPair，减少节点密集度
+        // 限制每章最多显示 8 个 QAPair
         const qaPerChapter = {};
         const filteredNodes = nodes.filter(n => {
             if (n.type !== 'QAPair') return true;
@@ -1592,7 +1592,7 @@ async function loadKnowledgeGraph() {
                       || links.find(l => l.type === 'BELONGS_TO' && l.source === n.id)?.target;
             if (!chId) return false;
             qaPerChapter[chId] = (qaPerChapter[chId] || 0) + 1;
-            return qaPerChapter[chId] <= 2;
+            return qaPerChapter[chId] <= 8;
         });
 
         const nodeIds = new Set(filteredNodes.map(n => n.id));
@@ -3288,7 +3288,7 @@ function renderRecentCases(cases) {
 function fillDiagnosisDemo() {
     const textarea = document.getElementById('fault-desc');
     if (textarea) {
-        textarea.value = '空舰导弹-鹰击-83-引战系统-YJ83-FZ-178-引信安全保险机构环境力不足致第二保险未解除';
+        textarea.value = '空射巡航导弹-KD-20飞行试验后回收导弹发现弹体中部一块维护口盖已消失不见，口盖周围的气动密封胶条残留完好，可能口盖在飞行中脱落。';
         textarea.dispatchEvent(new Event('input'));
         textarea.focus();
     }
@@ -3306,7 +3306,7 @@ function fillMaintenanceDemo() {
 function fillQADemo() {
     const textarea = document.getElementById('qa-question');
     if (textarea) {
-        textarea.value = '惯性导航原理是什么';
+        textarea.value = '雷达相控阵技术原理是什么';
         textarea.dispatchEvent(new Event('input'));
         textarea.focus();
     }

@@ -929,12 +929,13 @@ async def get_knowledge_graph():
                     nodes.append({"id": f"QAChapter_{r['id']}", "type": "QAChapter", "label": f"{r['label']}", "group": "qa"})
                     node_set.add(f"QAChapter_{r['id']}")
 
-                # QA 对：每个章节取 Top 3
+                # QA 对：每个章节取 8 个
                 for r in s.run("""
                     MATCH (q:QAPair)-[:BELONGS_TO]->(ch:QAChapter)
                     WITH q, ch.chapter_no AS ch_id
                     ORDER BY q.qa_no
                     RETURN q.qa_no AS id, q.question AS label, q.answer AS answer, ch_id, q.chapter_name AS chapter_name
+                    LIMIT 160
                 """):
                     key = f"QAPair_{r['id']}"
                     if key not in node_set:
