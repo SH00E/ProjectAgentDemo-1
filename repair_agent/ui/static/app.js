@@ -1669,17 +1669,17 @@ function renderKnowledgeGraph(container, nodes, links) {
     });
     
     const linkStyle = {
-        'BELONGS_TO': { stroke: '#93c5fd', width: 1.2, opacity: 0.5, dash: null, dist: 50, strength: 0.5 },
-        'RELATED_TO': { stroke: '#60a5fa', width: 0.8, opacity: 0.25, dash: '5,5', dist: 90, strength: 0.1 },
+        'BELONGS_TO': { stroke: '#93c5fd', width: 1.2, opacity: 0.5, dash: null, dist: 55, strength: 0.5 },
+        'RELATED_TO': { stroke: '#60a5fa', width: 0.8, opacity: 0.25, dash: '5,5', dist: 99, strength: 0.1 },
     };
     
     kgSimulation = d3.forceSimulation(nodes)
         .force('link', d3.forceLink(visibleLinks).id(d => d.id)
             .distance(d => (linkStyle[d.type] || {}).dist || 60)
             .strength(d => (linkStyle[d.type] || {}).strength || 0.3))
-        .force('charge', d3.forceManyBody().strength(-60))
+        .force('charge', d3.forceManyBody().strength(-66))
         .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('collision', d3.forceCollide().radius(d => (radiusScale[d.type] || 10) + 4));
+        .force('collision', d3.forceCollide().radius(d => (radiusScale[d.type] || 10) + 4.4));
     
     const link = g.append('g')
         .selectAll('line')
