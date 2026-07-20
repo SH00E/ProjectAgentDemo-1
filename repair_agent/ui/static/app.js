@@ -1584,7 +1584,7 @@ async function loadKnowledgeGraph() {
         
         const { nodes, links } = result.data;
 
-        // 限制每章最多显示 8 个 QAPair
+        // 限制每章最多显示 20 个 QAPair
         const qaPerChapter = {};
         const filteredNodes = nodes.filter(n => {
             if (n.type !== 'QAPair') return true;
@@ -1592,7 +1592,7 @@ async function loadKnowledgeGraph() {
                       || links.find(l => l.type === 'BELONGS_TO' && l.source === n.id)?.target;
             if (!chId) return false;
             qaPerChapter[chId] = (qaPerChapter[chId] || 0) + 1;
-            return qaPerChapter[chId] <= 8;
+            return qaPerChapter[chId] <= 20;
         });
 
         const nodeIds = new Set(filteredNodes.map(n => n.id));
@@ -1610,17 +1610,17 @@ function renderKnowledgeGraph(container, nodes, links) {
     container.innerHTML = '';
     
     const width = container.clientWidth || 900;
-    const height = 550;
-    
+    const height = 800;
+
     // 颜色映射
     const colorMap = {
-        'QAChapter': '#34d399',
+        'QAChapter': '#3b82f6',
         'QAPair': '#10b981',
     };
-    
+
     const radiusScale = {
-        'QAChapter': 16,
-        'QAPair': 7,
+        'QAChapter': 18,
+        'QAPair': 6,
     };
 
     // 创建SVG
@@ -1662,17 +1662,17 @@ function renderKnowledgeGraph(container, nodes, links) {
     });
     
     const linkStyle = {
-        'BELONGS_TO': { stroke: '#4ade80', width: 1.8, opacity: 0.7, dash: null, dist: 35, strength: 0.6 },
-        'RELATED_TO': { stroke: '#60a5fa', width: 1.0, opacity: 0.35, dash: '5,5', dist: 70, strength: 0.15 },
+        'BELONGS_TO': { stroke: '#93c5fd', width: 1.2, opacity: 0.5, dash: null, dist: 50, strength: 0.5 },
+        'RELATED_TO': { stroke: '#60a5fa', width: 0.8, opacity: 0.25, dash: '5,5', dist: 90, strength: 0.1 },
     };
     
     kgSimulation = d3.forceSimulation(nodes)
         .force('link', d3.forceLink(visibleLinks).id(d => d.id)
             .distance(d => (linkStyle[d.type] || {}).dist || 60)
             .strength(d => (linkStyle[d.type] || {}).strength || 0.3))
-        .force('charge', d3.forceManyBody().strength(-120))
+        .force('charge', d3.forceManyBody().strength(-60))
         .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('collision', d3.forceCollide().radius(d => (radiusScale[d.type] || 10) + 6));
+        .force('collision', d3.forceCollide().radius(d => (radiusScale[d.type] || 10) + 4));
     
     const link = g.append('g')
         .selectAll('line')
