@@ -1670,9 +1670,9 @@ function renderKnowledgeGraph(container, nodes, links) {
         .force('link', d3.forceLink(visibleLinks).id(d => d.id)
             .distance(d => (linkStyle[d.type] || {}).dist || 60)
             .strength(d => (linkStyle[d.type] || {}).strength || 0.3))
-        .force('charge', d3.forceManyBody().strength(-120))
+        .force('charge', d3.forceManyBody().strength(-180))
         .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('collision', d3.forceCollide().radius(d => (radiusScale[d.type] || 10) + 6));
+        .force('collision', d3.forceCollide().radius(d => (radiusScale[d.type] || 10) + 10));
     
     const link = g.append('g')
         .selectAll('line')
