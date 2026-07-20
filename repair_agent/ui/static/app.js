@@ -1596,9 +1596,16 @@ async function loadKnowledgeGraph() {
         });
 
         const nodeIds = new Set(filteredNodes.map(n => n.id));
+
+        // 删除没有 QAPair 的孤立章节节点
+        const finalNodes = filteredNodes.filter(n => {
+            if (n.type !== 'QAChapter') return true;
+            return links.some(l => l.type === 'BELONGS_TO' && l.target === n.id && nodeIds.has(l.source));
+        });
+
         const filteredLinks = links.filter(l => nodeIds.has(l.source) && nodeIds.has(l.target));
 
-        renderKnowledgeGraph(container, filteredNodes, filteredLinks);
+        renderKnowledgeGraph(container, finalNodes, filteredLinks);
         
     } catch (error) {
         container.innerHTML = `<div class="viz-empty"><div class="viz-empty-icon">❌</div><div class="viz-empty-text">加载失败: ${error.message}</div></div>`;

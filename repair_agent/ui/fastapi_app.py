@@ -935,7 +935,6 @@ async def get_knowledge_graph():
                     WITH q, ch.chapter_no AS ch_id
                     ORDER BY q.qa_no
                     RETURN q.qa_no AS id, q.question AS label, q.answer AS answer, ch_id, q.chapter_name AS chapter_name
-                    LIMIT 500
                 """):
                     key = f"QAPair_{r['id']}"
                     if key not in node_set:
